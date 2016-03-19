@@ -6,11 +6,11 @@ import (
 )
 
 type BatchOp struct {
-	flag int
-	itm  unsafe.Pointer
+	Flag int
+	Itm  unsafe.Pointer
 }
 
-type BatchOpCallback func(*Skiplist, *Node, []BatchOp, CompareFn) error
+type BatchOpCallback func(*Node, []BatchOp) error
 
 func (s *Skiplist) ExecBatchOps(ops []BatchOp, callb BatchOpCallback,
 	cmp CompareFn, sts *Stats) error {
@@ -36,15 +36,15 @@ func (s *Skiplist) execBatchOpsInner(startNode, endNode *Node, level int,
 		rightNode, _ := currNode.getNext(level)
 
 		// Descend to the next level
-		if compare(cmp, currOps[0].itm, rightNode.Item()) < 0 {
+		if compare(cmp, currOps[0].Itm, rightNode.Item()) < 0 {
 			if level == 0 {
 				offset := 1
 				for offset < len(currOps) &&
-					compare(cmp, currOps[offset].itm, rightNode.Item()) < 0 {
+					compare(cmp, currOps[offset].Itm, rightNode.Item()) < 0 {
 					offset++
 				}
 
-				if err = callb(s, currNode, currOps[0:offset], cmp); err != nil {
+				if err = callb(currNode, currOps[0:offset]); err != nil {
 					return
 				}
 

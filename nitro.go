@@ -168,6 +168,11 @@ type Writer struct {
 	count                  int64
 
 	*Nitro
+	fd     *os.File
+	rfd    *os.File
+	offset int
+
+	*MemDB
 }
 
 func (w *Writer) doCheckpoint() {
@@ -474,6 +479,8 @@ func (m *Nitro) newWriter() *Writer {
 		buf:   m.store.MakeBuf(),
 		Nitro: m,
 	}
+	w.fd, _ = os.OpenFile("test.data", os.O_WRONLY|os.O_CREATE, 0755)
+	w.rfd, _ = os.Open("test.data")
 
 	w.slSts1.IsLocal(true)
 	w.slSts2.IsLocal(true)

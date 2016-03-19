@@ -12,6 +12,7 @@ package nitro
 import "fmt"
 import "sync/atomic"
 import "os"
+import "sort"
 import "testing"
 import "time"
 import "math/rand"
@@ -27,6 +28,41 @@ func init() {
 	testConf.UseMemoryMgmt(mm.Malloc, mm.Free)
 	testConf.UseDeltaInterleaving()
 	Debug(true)
+}
+
+func TestBatchOps(t *testing.T) {
+	db := NewWithConfig(testConf)
+	defer db.Close()
+
+	w := db.NewWriter()
+
+	n := 1000000
+
+	var snap *Snapshot
+
+	for x := 0; x < 10; x++ {
+
+		keys := make([]int, n)
+		ops := make([]ItemOp, n)
+		for i := 0; i < n; i++ {
+			keys[i] = rand.Int()
+		}
+
+		sort.Ints(keys)
+		for i := 0; i < n; i++ {
+			ops[i] = ItemOp{bs: []byte(fmt.Sprintf("%010d", keys[i])), op: itemInsertop}
+		}
+
+		t0 := time.Now()
+		w.BatchModify(ops)
+		fmt.Println("thr", float64(n)/float64(time.Since(t0).Seconds()))
+		if snap != nil {
+			snap.Close()
+		}
+	}
+
+	snap, _ = w.NewSnapshot()
+	fmt.Println(db.DumpStats())
 }
 
 func TestInsert(t *testing.T) {
