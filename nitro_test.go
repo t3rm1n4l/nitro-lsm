@@ -31,11 +31,14 @@ func init() {
 }
 
 func TestBatchOps(t *testing.T) {
+	testConf.blockStoreDir = "/tmp/"
 	db := NewWithConfig(testConf)
 	defer db.Close()
 
-	w := db.NewWriter()
-
+	w, err := db.NewDiskWriter()
+	if err != nil {
+		panic(err)
+	}
 	n := 1000000
 
 	var snap *Snapshot
@@ -54,14 +57,14 @@ func TestBatchOps(t *testing.T) {
 		}
 
 		t0 := time.Now()
-		w.BatchModify(ops)
+		fmt.Println(w.BatchModify(ops))
 		fmt.Println("thr", float64(n)/float64(time.Since(t0).Seconds()))
 		if snap != nil {
 			snap.Close()
 		}
 	}
 
-	snap, _ = w.NewSnapshot()
+	snap, _ = db.NewSnapshot()
 	fmt.Println(db.DumpStats())
 }
 

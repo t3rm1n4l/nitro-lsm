@@ -290,6 +290,7 @@ func allocNode(itm unsafe.Pointer, level int, malloc MallocFn) *Node {
 	n := (*Node)(block)
 	n.level = uint16(level)
 	n.itm = itm
+	n.DataPtr = 0
 	n.GClink = nil
 	return n
 }

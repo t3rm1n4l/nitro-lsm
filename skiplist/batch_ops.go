@@ -17,6 +17,10 @@ func (s *Skiplist) ExecBatchOps(ops []BatchOp, callb BatchOpCallback,
 	remaining, err := s.execBatchOpsInner(s.head, s.tail, int(s.level), ops,
 		cmp, callb, sts)
 
+	if err != nil {
+		return err
+	}
+
 	if len(remaining) > 0 {
 		panic(fmt.Sprintf("non-zero items remaining %d", len(remaining)))
 	}
