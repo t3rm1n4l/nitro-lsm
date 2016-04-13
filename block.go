@@ -3,9 +3,6 @@ package memdb
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 )
 
 var (
@@ -65,68 +62,4 @@ func (db *dataBlock) Reset() {
 
 func (db *dataBlock) Bytes() []byte {
 	return db.buf[:db.offset]
-}
-
-type DiskWriter struct {
-	w        *Writer
-	woffset  int64
-	wfd, rfd *os.File
-
-	rbuf, wbuf []byte
-}
-
-func (m *MemDB) NewDiskWriter() (*DiskWriter, error) {
-	var err error
-
-	if m.blockStoreDir == "" {
-		return nil, errors.New("data filepath is not configured")
-	}
-
-	dw := &DiskWriter{
-		rbuf: make([]byte, blockSize),
-		wbuf: make([]byte, blockSize),
-	}
-
-	path := filepath.Join(m.blockStoreDir, "blockstore.data")
-	dw.wfd, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0755)
-	if err != nil {
-		return nil, err
-	}
-
-	dw.woffset, err = dw.wfd.Seek(0, 2)
-	if err != nil {
-		dw.wfd.Close()
-		return nil, err
-	}
-
-	dw.woffset += dw.woffset % blockSize
-
-	dw.rfd, err = os.Open(path)
-	if err != nil {
-		dw.wfd.Close()
-		return nil, err
-	}
-	dw.w = m.NewWriter()
-
-	return dw, nil
-}
-
-func (w *DiskWriter) writeBlock(bs []byte) (blockPtr, error) {
-	_, err := w.wfd.WriteAt(bs, w.woffset)
-	if err != nil {
-		return 0, err
-	}
-	bptr := blockPtr(w.woffset)
-	w.woffset += blockSize
-
-	return bptr, nil
-}
-
-func (w *DiskWriter) readBlock(bptr blockPtr) ([]byte, error) {
-	_, err := w.rfd.ReadAt(w.rbuf, int64(bptr))
-	return w.rbuf, err
-}
-
-func (w *DiskWriter) deleteBlock(bptr blockPtr) error {
-	return nil
 }

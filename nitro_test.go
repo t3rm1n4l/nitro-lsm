@@ -35,10 +35,6 @@ func TestBatchOps(t *testing.T) {
 	db := NewWithConfig(testConf)
 	defer db.Close()
 
-	w, err := db.NewDiskWriter()
-	if err != nil {
-		panic(err)
-	}
 	n := 1000000
 
 	var snap *Snapshot
@@ -57,7 +53,7 @@ func TestBatchOps(t *testing.T) {
 		}
 
 		t0 := time.Now()
-		fmt.Println(w.BatchModify(ops))
+		fmt.Println(db.BatchModify(ops))
 		fmt.Println("thr", float64(n)/float64(time.Since(t0).Seconds()))
 		if snap != nil {
 			snap.Close()

@@ -12,30 +12,45 @@ const (
 	itemInsertop
 )
 
+type diskWriter struct {
+	shard      int
+	w          *Writer
+	rbuf, wbuf []byte
+}
+
+func (m *MemDB) newDiskWriter(shard int) *diskWriter {
+	return &diskWriter{
+		rbuf:  make([]byte, blockSize),
+		wbuf:  make([]byte, blockSize),
+		w:     m.NewWriter(),
+		shard: shard,
+	}
+}
+
 type ItemOp struct {
 	bs []byte
 	op int
 }
 
-func (dw *DiskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.BatchOp) error {
+func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.BatchOp) error {
 	var err error
 	var indexItem []byte
 	var nodeItems [][]byte
 
 	if n.Item() != skiplist.MinItem {
 		dw.w.DeleteNode(n)
-		bs, err := dw.readBlock(blockPtr(n.DataPtr))
+		err := dw.w.bm.ReadBlock(blockPtr(n.DataPtr), dw.rbuf)
 		if err != nil {
 			return err
 		}
 
-		nodeItems = newDataBlock(bs).GetItems()
+		nodeItems = newDataBlock(dw.rbuf).GetItems()
 	}
 
 	wblock := newDataBlock(dw.wbuf)
 
 	flushBlock := func() error {
-		bptr, err := dw.writeBlock(wblock.Bytes())
+		bptr, err := dw.w.bm.WriteBlock(wblock.Bytes(), dw.shard)
 		if err == nil {
 			indexNode := dw.w.Put2(indexItem)
 			if indexNode == nil {
@@ -114,14 +129,15 @@ func (dw *DiskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 	return nil
 }
 
-func (dw *DiskWriter) BatchModify(ops []ItemOp) error {
+// TODO: Support multiple shards
+func (m *MemDB) BatchModify(ops []ItemOp) error {
 	sops := make([]skiplist.BatchOp, len(ops))
 	for i, op := range ops {
-		x := dw.w.newItem(op.bs, dw.w.useMemoryMgmt)
-		x.bornSn = dw.w.getCurrSn()
+		x := m.newItem(op.bs, m.useMemoryMgmt)
+		x.bornSn = m.getCurrSn()
 		sops[i].Itm = unsafe.Pointer(x)
 		sops[i].Flag = op.op
 	}
 
-	return dw.w.store.ExecBatchOps(sops, dw.batchModifyCallback, dw.w.insCmp, &dw.w.store.Stats)
+	return m.store.ExecBatchOps(sops, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
 }
