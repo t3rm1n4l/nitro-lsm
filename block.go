@@ -61,5 +61,13 @@ func (db *dataBlock) Reset() {
 }
 
 func (db *dataBlock) Bytes() []byte {
-	return db.buf[:db.offset]
+	offset := db.offset
+	// Set 2 byte len = 0
+	if offset+1 < len(db.buf) {
+		db.buf[offset] = 0
+		db.buf[offset+1] = 0
+		offset += 2
+	}
+
+	return db.buf[:offset]
 }

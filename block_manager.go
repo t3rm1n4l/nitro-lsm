@@ -37,6 +37,8 @@ type fileBlockManager struct {
 	rfds   []*os.File
 
 	wpos []int64
+
+	freeBlocks [][]int64
 }
 
 func newFileBlockManager(nfiles int, path string) (*fileBlockManager, error) {
@@ -58,6 +60,7 @@ func newFileBlockManager(nfiles int, path string) (*fileBlockManager, error) {
 	fbm.wlocks = make([]sync.Mutex, nfiles)
 	fbm.rlocks = make([]sync.Mutex, nfiles)
 	fbm.wpos = make([]int64, nfiles)
+	fbm.freeBlocks = make([][]int64, nfiles)
 
 	for i := 0; i < nfiles; i++ {
 		fpath := filepath.Join(path, fmt.Sprintf("blockstore-%d.data", i))
@@ -78,12 +81,18 @@ func newFileBlockManager(nfiles int, path string) (*fileBlockManager, error) {
 			return nil, err
 		}
 		fbm.rfds = append(fbm.rfds, fd)
+		fbm.freeBlocks[i] = make([]int64, 0)
 	}
 
 	return fbm, err
 }
 
 func (fbm *fileBlockManager) DeleteBlock(bptr blockPtr) error {
+	shard := bptr.Shard()
+	fbm.wlocks[shard].Lock()
+	defer fbm.wlocks[shard].Unlock()
+	fbm.freeBlocks[shard] = append(fbm.freeBlocks[shard], bptr.Offset())
+
 	return nil
 }
 
@@ -92,14 +101,24 @@ func (fbm *fileBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) 
 	fbm.wlocks[shard].Lock()
 	defer fbm.wlocks[shard].Unlock()
 
-	_, err := fbm.wfds[shard].WriteAt(bs, fbm.wpos[shard])
+	var pos int64
+
+	flist := fbm.freeBlocks[shard]
+	if len(flist) > 0 {
+		pos = flist[len(flist)-1]
+		flist = flist[0 : len(flist)-1]
+		fbm.freeBlocks[shard] = flist
+	} else {
+		pos = fbm.wpos[shard]
+		fbm.wpos[shard] += blockSize
+	}
+
+	_, err := fbm.wfds[shard].WriteAt(bs, pos)
 	if err != nil {
 		return 0, err
 	}
 
-	bptr := blockPtr(fbm.wpos[shard])
-	fbm.wpos[shard] += blockSize
-
+	bptr := newBlockPtr(shard, pos)
 	return bptr, nil
 }
 
