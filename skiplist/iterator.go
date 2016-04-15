@@ -67,7 +67,16 @@ func (it *Iterator) Seek(itm unsafe.Pointer) bool {
 	return found
 }
 
+func (it *Iterator) SeekPrev(itm unsafe.Pointer) {
+	if !it.Seek(itm) {
+		it.curr = it.prev
+		it.prev = nil
+	}
+}
+
 // Valid returns true when iterator reaches the end
+// If the specified item is not found, start with the predecessor node
+// This is used for implementing disk block based storage
 func (it *Iterator) Valid() bool {
 	if it.valid && it.curr == it.s.tail {
 		it.valid = false
@@ -109,7 +118,7 @@ retry:
 		// Current node is deleted. Unlink current node from the level
 		// and make next node as current node.
 		// If it fails, refresh the path buffer and obtain new current node.
-		if it.s.helpDelete(0, it.prev, it.curr, next, &it.s.Stats) {
+		if it.prev != nil && it.s.helpDelete(0, it.prev, it.curr, next, &it.s.Stats) {
 			it.curr = next
 		} else {
 			atomic.AddUint64(&it.s.Stats.readConflicts, 1)
