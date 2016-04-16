@@ -59,6 +59,39 @@ func TestBatchOps(t *testing.T) {
 			snap.Close()
 		}
 		snap, _ = db.NewSnapshot()
+
+		it := snap.NewIterator()
+		i := 0
+		for it.SeekFirst(); it.Valid(); it.Next() {
+			exp := fmt.Sprintf("%010d", keys[i])
+			if string(it.Get()) != exp {
+				t.Errorf("expected %s, got %s", exp, string(it.Get()))
+			}
+			i++
+		}
+
+		exp := fmt.Sprintf("%010d", 1000)
+		it.Seek([]byte(exp))
+		for i := 1000; i < 2000; i++ {
+			exp := fmt.Sprintf("%010d", i)
+			if string(it.Get()) != exp {
+				t.Errorf("%s", string(it.Get()))
+			}
+			it.Next()
+		}
+
+		var wg sync.WaitGroup
+		t0 = time.Now()
+		total := n * runtime.GOMAXPROCS(0)
+		for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+			wg.Add(1)
+			go doGet(t, db, snap, &wg, n)
+		}
+		wg.Wait()
+		dur := time.Since(t0)
+		fmt.Printf("%d items took %v -> %v items/s\n", total, dur, float64(total)/float64(dur.Seconds()))
+
+		it.Close()
 	}
 
 	snap, _ = db.NewSnapshot()
@@ -153,13 +186,14 @@ func doGet(t *testing.T, db *Nitro, snap *Snapshot, wg *sync.WaitGroup, n int) {
 	defer wg.Done()
 	rnd := rand.New(rand.NewSource(int64(rand.Int())))
 
-	buf := make([]byte, 8)
+	//buf := make([]byte, 8)
 	itr := db.NewIterator(snap)
 	defer itr.Close()
 	for i := 0; i < n; i++ {
 		val := rnd.Int() % n
-		binary.BigEndian.PutUint64(buf, uint64(val))
-		itr.Seek(buf)
+		//	binary.BigEndian.PutUint64(buf, uint64(val))
+		exp := fmt.Sprintf("%010d", val)
+		itr.Seek([]byte(exp))
 		if !itr.Valid() {
 			t.Errorf("Expected to find %v", val)
 		}
