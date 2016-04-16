@@ -2,6 +2,7 @@ package memdb
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -127,6 +128,12 @@ func (fbm *fileBlockManager) ReadBlock(bptr blockPtr, buf []byte) error {
 	fbm.rlocks[shard].Lock()
 	defer fbm.rlocks[shard].Unlock()
 
-	_, err := fbm.rfds[shard].ReadAt(buf, bptr.Offset())
+	n, err := fbm.rfds[shard].ReadAt(buf, bptr.Offset())
+	if err == io.EOF {
+		for ; n < len(buf); n++ {
+			buf[n] = 0
+		}
+		err = nil
+	}
 	return err
 }
