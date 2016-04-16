@@ -39,7 +39,7 @@ func TestBatchOps(t *testing.T) {
 
 	var snap *Snapshot
 
-	for x := 0; x < 1000; x++ {
+	for x := 0; x < 10; x++ {
 
 		keys := make([]int, n)
 		ops := make([]ItemOp, n)

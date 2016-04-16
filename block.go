@@ -22,6 +22,22 @@ func newDataBlock(bs []byte) *dataBlock {
 	}
 }
 
+func (db *dataBlock) Get() []byte {
+	if db.offset+2 < blockSize {
+		l := int(binary.BigEndian.Uint16(db.buf[db.offset : db.offset+2]))
+		if l == 0 {
+			db.offset = blockSize
+			return nil
+		}
+		db.offset += 2
+		offset := db.offset
+		db.offset += l
+		return db.buf[offset : offset+l]
+	}
+
+	return nil
+}
+
 func (db *dataBlock) GetItems() [][]byte {
 	var itms [][]byte
 
