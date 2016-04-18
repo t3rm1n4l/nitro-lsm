@@ -35,7 +35,7 @@ func TestBatchOps(t *testing.T) {
 	db := NewWithConfig(testConf)
 	defer db.Close()
 
-	n := 100000
+	n := 5000000
 
 	var snap *Snapshot
 
@@ -82,10 +82,11 @@ func TestBatchOps(t *testing.T) {
 
 		var wg sync.WaitGroup
 		t0 = time.Now()
-		total := n * runtime.GOMAXPROCS(0)
-		for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+		threads := 16
+		total := n * threads
+		for i := 0; i < threads; i++ {
 			wg.Add(1)
-			go doGet(t, db, snap, &wg, n)
+			go doGet(t, db, snap, &wg, n/threads)
 		}
 		wg.Wait()
 		dur := time.Since(t0)
@@ -197,7 +198,11 @@ func doGet(t *testing.T, db *Nitro, snap *Snapshot, wg *sync.WaitGroup, n int) {
 		if !itr.Valid() {
 			t.Errorf("Expected to find %v", val)
 		}
+		if exp != string(itr.Get()) {
+			panic(string(itr.Get()))
+		}
 	}
+	itr.Close()
 }
 
 func TestInsertDuplicates(t *testing.T) {
