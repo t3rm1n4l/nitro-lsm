@@ -35,7 +35,7 @@ type ItemOp struct {
 func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.BatchOp) error {
 	var err error
 	var indexItem []byte
-	var nodeItems [][]byte
+	var db *dataBlock
 
 	if n.Item() != skiplist.MinItem {
 		dw.w.DeleteNode(n)
@@ -44,7 +44,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 			return err
 		}
 
-		nodeItems = newDataBlock(dw.rbuf).GetItems()
+		db = newDataBlock(dw.rbuf)
 	}
 
 	wblock := newDataBlock(dw.wbuf)
@@ -80,15 +80,15 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 		return nil
 	}
 
-	opi, ni := 0, 0
-	for err == nil && opi < len(ops) && ni < len(nodeItems) {
-		nItm := nodeItems[ni]
+	opi := 0
+	var nItm []byte
+	for nItm = db.Get(); err == nil && opi < len(ops) && nItm != nil; {
 		opItm := (*Item)(ops[opi].Itm).Bytes()
 		cmpval := bytes.Compare(nItm, opItm)
 		switch {
 		case cmpval < 0:
 			err = doWriteItem(nItm)
-			ni++
+			nItm = db.Get()
 			break
 		case cmpval == 0:
 			if ops[opi].Flag == itemInsertop {
@@ -96,7 +96,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 			}
 
 			opi++
-			ni++
+			nItm = db.Get()
 			break
 		default:
 			if ops[opi].Flag == itemInsertop {
@@ -113,8 +113,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 		}
 	}
 
-	for ; err == nil && ni < len(nodeItems); ni++ {
-		nItm := nodeItems[ni]
+	for ; err == nil && nItm != nil; nItm = db.Get() {
 		err = doWriteItem(nItm)
 	}
 
