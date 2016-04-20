@@ -33,8 +33,6 @@ func (ptr blockPtr) Shard() int {
 type fileBlockManager struct {
 	wlocks []sync.Mutex
 	wfds   []*os.File
-
-	rlocks []sync.Mutex
 	rfds   []*os.File
 
 	wpos []int64
@@ -59,7 +57,6 @@ func newFileBlockManager(nfiles int, path string) (*fileBlockManager, error) {
 	}()
 
 	fbm.wlocks = make([]sync.Mutex, nfiles)
-	fbm.rlocks = make([]sync.Mutex, nfiles)
 	fbm.wpos = make([]int64, nfiles)
 	fbm.freeBlocks = make([][]int64, nfiles)
 
@@ -100,8 +97,6 @@ func (fbm *fileBlockManager) DeleteBlock(bptr blockPtr) error {
 func (fbm *fileBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) {
 	shard = shard % len(fbm.wpos)
 	fbm.wlocks[shard].Lock()
-	defer fbm.wlocks[shard].Unlock()
-
 	var pos int64
 
 	flist := fbm.freeBlocks[shard]
@@ -113,6 +108,7 @@ func (fbm *fileBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) 
 		pos = fbm.wpos[shard]
 		fbm.wpos[shard] += blockSize
 	}
+	fbm.wlocks[shard].Unlock()
 
 	_, err := fbm.wfds[shard].WriteAt(bs, pos)
 	if err != nil {
@@ -125,9 +121,6 @@ func (fbm *fileBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) 
 
 func (fbm *fileBlockManager) ReadBlock(bptr blockPtr, buf []byte) error {
 	shard := bptr.Shard()
-	fbm.rlocks[shard].Lock()
-	defer fbm.rlocks[shard].Unlock()
-
 	n, err := fbm.rfds[shard].ReadAt(buf, bptr.Offset())
 	if err == io.EOF {
 		for ; n < len(buf); n++ {
