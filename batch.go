@@ -1,8 +1,8 @@
-package memdb
+package nitro
 
 import (
 	"bytes"
-	"github.com/t3rm1n4l/memdb/skiplist"
+	"github.com/t3rm1n4l/nitro/skiplist"
 	"unsafe"
 )
 
@@ -18,7 +18,7 @@ type diskWriter struct {
 	rbuf, wbuf []byte
 }
 
-func (m *MemDB) newDiskWriter(shard int) *diskWriter {
+func (m *Nitro) newDiskWriter(shard int) *diskWriter {
 	return &diskWriter{
 		rbuf:  make([]byte, blockSize),
 		wbuf:  make([]byte, blockSize),
@@ -129,7 +129,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 }
 
 // TODO: Support multiple shards
-func (m *MemDB) BatchModify(ops []ItemOp) error {
+func (m *Nitro) BatchModify(ops []ItemOp) error {
 	sops := make([]skiplist.BatchOp, len(ops))
 	for i, op := range ops {
 		x := m.newItem(op.bs, m.useMemoryMgmt)

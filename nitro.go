@@ -310,10 +310,6 @@ func (cfg *Config) SetKeyComparator(cmp KeyCompare) {
 	cfg.existCmp = newExistCompare(cmp)
 }
 
-func (cfg *Config) IgnoreItemSize() {
-	cfg.ignoreItemSize = true
-}
-
 func (cfg *Config) HasBlockStore() bool {
 	return cfg.blockStoreDir != ""
 }
