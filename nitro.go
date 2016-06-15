@@ -218,10 +218,18 @@ func (w *Writer) Put(bs []byte) {
 }
 
 // Put2 returns the skiplist node of the item if Put() succeeds
-func (w *Writer) Put2(bs []byte) (n *skiplist.Node) {
+func (w *Writer) Put2(bs []byte) *skiplist.Node {
+	return w.insert(bs, true)
+}
+
+func (w *Writer) insert(bs []byte, isCreate bool) (n *skiplist.Node) {
 	var success bool
 	x := w.newItem(bs, w.useMemoryMgmt)
-	x.bornSn = w.getCurrSn()
+	if isCreate {
+		x.bornSn = w.getCurrSn()
+	} else {
+		x.deadSn = w.getCurrSn()
+	}
 	n, success = w.store.Insert2(unsafe.Pointer(x), w.insCmp, w.existCmp, w.buf,
 		w.rand.Float32, &w.slSts1)
 	if success {
@@ -279,6 +287,15 @@ func (w *Writer) DeleteNode(x *skiplist.Node) (success bool) {
 		}
 	}
 	return
+}
+
+// DeleteNonExist creates a delete marker node if an item does not exist
+func (w *Writer) DeleteNonExist(bs []byte) bool {
+	if n := w.GetNode(bs); n != nil {
+		return w.DeleteNode(n)
+	}
+
+	return w.insert(bs, false) != nil
 }
 
 // GetNode implements lookup of an item and return its skiplist Node
