@@ -100,7 +100,20 @@ func newInsertCompare(keyCmp KeyCompare) skiplist.CompareFn {
 		thisItem := (*Item)(this)
 		thatItem := (*Item)(that)
 		if v = keyCmp(thisItem.Bytes(), thatItem.Bytes()); v == 0 {
-			v = int(thisItem.bornSn) - int(thatItem.bornSn)
+			var thisSn, thatSn uint32
+
+			if thisItem.bornSn == 0 {
+				thisSn = thisItem.deadSn
+			} else {
+				thisSn = thisItem.bornSn
+			}
+
+			if thatItem.bornSn == 0 {
+				thatSn = thatItem.deadSn
+			} else {
+				thatSn = thatItem.bornSn
+			}
+			v = int(thisSn) - int(thatSn)
 		}
 
 		return v
