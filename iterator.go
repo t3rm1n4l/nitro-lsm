@@ -102,8 +102,10 @@ func (it *Iterator) GetNode() *skiplist.Node {
 
 // Next moves iterator cursor to the next item
 func (it *Iterator) Next() {
-	if it.curr = it.block.Get(); it.curr != nil {
-		return
+	if it.snap.db.HasBlockStore() {
+		if it.curr = it.block.Get(); it.curr != nil {
+			return
+		}
 	}
 
 	it.iter.Next()
