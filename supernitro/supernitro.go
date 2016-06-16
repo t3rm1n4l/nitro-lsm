@@ -2,10 +2,11 @@ package supernitro
 
 import (
 	"github.com/t3rm1n4l/nitro"
+	"sync"
 )
 
 type Config struct {
-	MaxMStoreSize int
+	MaxMStoreSize int64
 }
 
 func DefaultConfig() Config {
@@ -15,9 +16,13 @@ func DefaultConfig() Config {
 }
 
 type SuperNitro struct {
+	sync.Mutex
 	Config
 	mstore *nitro.Nitro
 	dstore *nitro.Nitro
+
+	// Lower level immutable snapshots
+	snaps []*nitro.Snapshot
 
 	wrlist []*Writer
 }
@@ -40,38 +45,57 @@ func (m *SuperNitro) NewWriter() *Writer {
 }
 
 type Snapshot struct {
-	msnap *nitro.Snapshot
-	dsnap *nitro.Snapshot
+	snaps []*nitro.Snapshot
 }
 
 func (s *Snapshot) Open() bool {
-	if !s.msnap.Open() {
-		return false
-	}
-
-	if s.dsnap != nil && !s.dsnap.Open() {
-		return false
+	for i, snap := range s.snaps {
+		if !snap.Open() {
+			for x := 0; x < i; x++ {
+				s.snaps[x].Close()
+			}
+			return false
+		}
 	}
 
 	return true
 }
 
 func (s *Snapshot) Close() {
-	s.msnap.Close()
-	if s.dsnap != nil {
-		s.dsnap.Close()
+	for _, snap := range s.snaps {
+		snap.Close()
 	}
 }
 
+func (m *SuperNitro) execMerge(msnap *nitro.Snapshot) {
+	msnap.Open()
+	go func() {
+		defer msnap.Close()
+		// Perform merge operation
+
+	}()
+}
+
 func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
+	m.Lock()
+	defer m.Unlock()
+
+	snap := &Snapshot{}
 	msnap, err := m.mstore.NewSnapshot()
 	if err != nil {
 		return nil, err
 	}
+	snap.snaps = append(snap.snaps, msnap)
+	snap.snaps = append(snap.snaps, m.snaps...)
 
-	return &Snapshot{
-		msnap: msnap,
-	}, nil
+	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
+		m.snaps = append([]*nitro.Snapshot{msnap}, m.snaps...)
+		m.mstore = nitro.New()
+		m.execMerge(msnap)
+		go m.mstore.Close()
+	}
+
+	return snap, nil
 }
 
 type Writer struct {
