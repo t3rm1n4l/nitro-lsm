@@ -20,7 +20,7 @@ var (
 	MaxItem = unsafe.Pointer(^uintptr(0))
 )
 
-func compare(cmp CompareFn, this, that unsafe.Pointer) int {
+func Compare(cmp CompareFn, this, that unsafe.Pointer) int {
 	if this == MinItem || that == MaxItem {
 		return -1
 	}

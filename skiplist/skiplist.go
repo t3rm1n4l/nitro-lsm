@@ -209,7 +209,7 @@ retry:
 				next, deleted = curr.getNext(i)
 			}
 
-			cmpVal = compare(cmp, curr.Item(), itm)
+			cmpVal = Compare(cmp, curr.Item(), itm)
 			if cmpVal < 0 {
 				prev = curr
 				curr = next
@@ -256,7 +256,7 @@ retry:
 		skipFindPath = false
 	} else {
 		if s.findPath(itm, insCmp, buf, sts) != nil ||
-			eqCmp != nil && compare(eqCmp, itm, buf.preds[0].Item()) == 0 {
+			eqCmp != nil && Compare(eqCmp, itm, buf.preds[0].Item()) == 0 {
 
 			s.freeNode(x)
 			return nil, false

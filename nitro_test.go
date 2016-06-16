@@ -95,8 +95,10 @@ func TestBatchOps(t *testing.T) {
 		it.Close()
 	}
 
+	snap.Close()
 	snap, _ = db.NewSnapshot()
 	fmt.Println(db.DumpStats())
+	snap.Close()
 }
 
 func TestInsert(t *testing.T) {

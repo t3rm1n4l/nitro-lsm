@@ -7,8 +7,11 @@ import (
 )
 
 const blockSize = 4096
+
+type itemOp int
+
 const (
-	itemDeleteOp = iota
+	itemDeleteOp itemOp = iota
 	itemInsertop
 )
 
@@ -29,13 +32,43 @@ func (m *Nitro) newDiskWriter(shard int) *diskWriter {
 
 type ItemOp struct {
 	bs []byte
-	op int
+	op itemOp
 }
 
-func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.BatchOp) error {
+type batchOp struct {
+	itm unsafe.Pointer
+	op  itemOp
+}
+
+type batchOpIterator struct {
+	offset int
+	ops    []batchOp
+}
+
+func (it *batchOpIterator) Valid() bool {
+	return it.offset < len(it.ops)
+}
+
+func (it *batchOpIterator) Next() {
+	it.offset++
+}
+
+func (it *batchOpIterator) Item() unsafe.Pointer {
+	return it.ops[it.offset].itm
+}
+
+func (it *batchOpIterator) Op() itemOp {
+	return it.ops[it.offset].op
+}
+
+func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.CompareFn,
+	maxItem unsafe.Pointer, sOpItr skiplist.BatchOpIterator) error {
+
 	var err error
 	var indexItem []byte
 	var db *dataBlock
+
+	opItr := sOpItr.(*batchOpIterator)
 
 	if n.Item() != skiplist.MinItem {
 		dw.w.DeleteNode(n)
@@ -80,10 +113,10 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 		return nil
 	}
 
-	opi := 0
 	var nItm []byte
-	for nItm = db.Get(); err == nil && opi < len(ops) && nItm != nil; {
-		opItm := (*Item)(ops[opi].Itm).Bytes()
+	for nItm = db.Get(); err == nil && opItr.Valid() &&
+		skiplist.Compare(cmp, opItr.Item(), maxItem) < 0 && nItm != nil; {
+		opItm := (*Item)(opItr.Item()).Bytes()
 		cmpval := bytes.Compare(nItm, opItm)
 		switch {
 		case cmpval < 0:
@@ -91,24 +124,26 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 			nItm = db.Get()
 			break
 		case cmpval == 0:
-			if ops[opi].Flag == itemInsertop {
+			if opItr.Op() == itemInsertop {
 				err = doWriteItem(opItm)
 			}
 
-			opi++
+			opItr.Next()
 			nItm = db.Get()
 			break
 		default:
-			if ops[opi].Flag == itemInsertop {
+			if opItr.Op() == itemInsertop {
 				err = doWriteItem(opItm)
-				opi++
+				opItr.Next()
 			}
 		}
 	}
 
-	for ; err == nil && opi < len(ops); opi++ {
-		if ops[opi].Flag == itemInsertop {
-			opItm := (*Item)(ops[opi].Itm).Bytes()
+	for ; err == nil && opItr.Valid() &&
+		skiplist.Compare(cmp, opItr.Item(), maxItem) < 0; opItr.Next() {
+
+		if opItr.Op() == itemInsertop {
+			opItm := (*Item)(opItr.Item()).Bytes()
 			err = doWriteItem(opItm)
 		}
 	}
@@ -130,13 +165,17 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, ops []skiplist.Batch
 
 // TODO: Support multiple shards
 func (m *Nitro) BatchModify(ops []ItemOp) error {
-	sops := make([]skiplist.BatchOp, len(ops))
+	sops := make([]batchOp, len(ops))
 	for i, op := range ops {
 		x := m.newItem(op.bs, m.useMemoryMgmt)
 		x.bornSn = m.getCurrSn()
-		sops[i].Itm = unsafe.Pointer(x)
-		sops[i].Flag = op.op
+		sops[i].itm = unsafe.Pointer(x)
+		sops[i].op = op.op
 	}
 
-	return m.store.ExecBatchOps(sops, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
+	opItr := &batchOpIterator{
+		ops: sops,
+	}
+
+	return m.store.ExecBatchOps(opItr, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
 }

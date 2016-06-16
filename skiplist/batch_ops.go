@@ -1,60 +1,53 @@
 package skiplist
 
 import (
-	"fmt"
 	"unsafe"
 )
 
-type BatchOp struct {
-	Flag int
-	Itm  unsafe.Pointer
+type BatchOpIterator interface {
+	Next()
+	Valid() bool
+	Item() unsafe.Pointer
 }
 
-type BatchOpCallback func(*Node, []BatchOp) error
+type AcceptFn func(unsafe.Pointer) bool
 
-func (s *Skiplist) ExecBatchOps(ops []BatchOp, callb BatchOpCallback,
+type BatchOpCallback func(*Node, CompareFn, unsafe.Pointer, BatchOpIterator) error
+
+func (s *Skiplist) ExecBatchOps(opItr BatchOpIterator, callb BatchOpCallback,
 	cmp CompareFn, sts *Stats) error {
-	remaining, err := s.execBatchOpsInner(s.head, s.tail, int(s.level), ops,
+	err := s.execBatchOpsInner(s.head, s.tail, int(s.level), opItr,
 		cmp, callb, sts)
 
 	if err != nil {
 		return err
 	}
 
-	if len(remaining) > 0 {
-		panic(fmt.Sprintf("non-zero items remaining %d", len(remaining)))
+	if opItr.Valid() {
+		panic("non-zero items remaining")
 	}
 
 	return err
 }
 
 func (s *Skiplist) execBatchOpsInner(startNode, endNode *Node, level int,
-	ops []BatchOp, cmp CompareFn,
-	callb BatchOpCallback, sts *Stats) (currOps []BatchOp, err error) {
+	opItr BatchOpIterator, cmp CompareFn,
+	callb BatchOpCallback, sts *Stats) (err error) {
 
-	currOps = ops
 	currNode := startNode
 
 	// Iterate in the current level
-	for compare(cmp, currNode.Item(), endNode.Item()) < 0 && len(currOps) > 0 {
+	for Compare(cmp, currNode.Item(), endNode.Item()) < 0 && opItr.Valid() {
 		rightNode, _ := currNode.getNext(level)
 
 		// Descend to the next level
-		if compare(cmp, currOps[0].Itm, rightNode.Item()) < 0 {
+		if Compare(cmp, opItr.Item(), rightNode.Item()) < 0 {
 			if level == 0 {
-				offset := 1
-				for offset < len(currOps) &&
-					compare(cmp, currOps[offset].Itm, rightNode.Item()) < 0 {
-					offset++
-				}
-
-				if err = callb(currNode, currOps[0:offset]); err != nil {
+				if err = callb(currNode, cmp, rightNode.Item(), opItr); err != nil {
 					return
 				}
-
-				currOps = currOps[offset:] // Remaining
 			} else {
-				if currOps, err = s.execBatchOpsInner(currNode, rightNode, level-1, currOps,
+				if err = s.execBatchOpsInner(currNode, rightNode, level-1, opItr,
 					cmp, callb, sts); err != nil {
 					return
 				}

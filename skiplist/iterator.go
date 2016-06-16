@@ -50,7 +50,7 @@ func (it *Iterator) SeekWithCmp(itm unsafe.Pointer, cmp CompareFn, eqCmp Compare
 		it.prev = it.buf.preds[0]
 		it.curr = it.buf.succs[0]
 	} else {
-		if found = eqCmp != nil && compare(eqCmp, itm, it.buf.preds[0].Item()) == 0; found {
+		if found = eqCmp != nil && Compare(eqCmp, itm, it.buf.preds[0].Item()) == 0; found {
 			it.prev = nil
 			it.curr = it.buf.preds[0]
 		}
