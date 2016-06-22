@@ -36,8 +36,8 @@ func New() *SuperNitro {
 
 func (m *SuperNitro) NewWriter() *Writer {
 	w := &Writer{
-		m:  m,
-		mw: m.mstore.NewWriter(),
+		SuperNitro: m,
+		mw:         m.mstore.NewWriter(),
 	}
 
 	m.wrlist = append(m.wrlist, w)
@@ -72,7 +72,22 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot) {
 	go func() {
 		defer msnap.Close()
 		// Perform merge operation
+		itr := msnap.NewIterator()
+		defer itr.Close()
+		opItr := nitro.NewOpIterator(itr)
+		m.dstore.BatchModify(opItr)
+		dsnap, err := m.dstore.NewSnapshot()
+		if err != nil {
+			panic(err)
+		}
+		m.Lock()
+		defer m.Unlock()
 
+		for _, snap := range m.snaps {
+			snap.Close()
+		}
+
+		m.snaps = []*nitro.Snapshot{dsnap}
 	}()
 }
 
@@ -90,16 +105,27 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 
 	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
 		m.snaps = append([]*nitro.Snapshot{msnap}, m.snaps...)
+		mstoreOld := m.mstore
 		m.mstore = nitro.New()
 		m.execMerge(msnap)
-		go m.mstore.Close()
+		go mstoreOld.Close()
 	}
 
 	return snap, nil
 }
 
+func (m *SuperNitro) Close() {
+	for _, snap := range m.snaps {
+		snap.Close()
+	}
+	m.mstore.Close()
+	if m.dstore != nil {
+		m.dstore.Close()
+	}
+}
+
 type Writer struct {
-	m  *SuperNitro
+	*SuperNitro
 	mw *nitro.Writer
 }
 
