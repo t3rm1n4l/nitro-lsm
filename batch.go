@@ -44,7 +44,7 @@ func NewOpIterator(itr *Iterator) BatchOpIterator {
 }
 
 func (it *nodeOpIterator) Item() unsafe.Pointer {
-	return it.Item()
+	return it.Iterator.GetNode().Item()
 }
 
 func (it *nodeOpIterator) Next() {
@@ -174,7 +174,8 @@ type batchOpIterator struct {
 
 func (it *batchOpIterator) fillItem() {
 	srcItm := (*Item)(it.BatchOpIterator.Item())
-	dstItm := it.db.allocItem(len(srcItm.Bytes()), false)
+	l := len(srcItm.Bytes())
+	dstItm := it.db.allocItem(l, false)
 	copy(dstItm.Bytes(), srcItm.Bytes())
 	dstItm.bornSn = it.db.getCurrSn()
 	it.itm = unsafe.Pointer(dstItm)
@@ -182,7 +183,13 @@ func (it *batchOpIterator) fillItem() {
 
 func (it *batchOpIterator) Next() {
 	it.BatchOpIterator.Next()
-	it.fillItem()
+	if it.BatchOpIterator.Valid() {
+		it.fillItem()
+	}
+}
+
+func (it *batchOpIterator) Item() unsafe.Pointer {
+	return it.itm
 }
 
 // TODO: Support multiple shards
