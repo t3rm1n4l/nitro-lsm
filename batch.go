@@ -30,35 +30,39 @@ func (m *Nitro) newDiskWriter(shard int) *diskWriter {
 	}
 }
 
-type ItemOp struct {
-	bs []byte
-	op itemOp
+type nodeOpIterator struct {
+	*Iterator
 }
 
-type batchOp struct {
-	itm unsafe.Pointer
-	op  itemOp
+func NewOpIterator(itr *Iterator) BatchOpIterator {
+	it := &nodeOpIterator{
+		Iterator: itr,
+	}
+
+	itr.SeekFirst()
+	return it
 }
 
-type batchOpIterator struct {
-	offset int
-	ops    []batchOp
+func (it *nodeOpIterator) Item() unsafe.Pointer {
+	return it.Item()
 }
 
-func (it *batchOpIterator) Valid() bool {
-	return it.offset < len(it.ops)
+func (it *nodeOpIterator) Next() {
+	it.Iterator.Next()
 }
 
-func (it *batchOpIterator) Next() {
-	it.offset++
+func (it *nodeOpIterator) Op() itemOp {
+	return itemInsertop
 }
 
-func (it *batchOpIterator) Item() unsafe.Pointer {
-	return it.ops[it.offset].itm
+func (it *nodeOpIterator) Close() {
+	it.Iterator.Close()
 }
 
-func (it *batchOpIterator) Op() itemOp {
-	return it.ops[it.offset].op
+type BatchOpIterator interface {
+	skiplist.BatchOpIterator
+	Op() itemOp
+	Close()
 }
 
 func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.CompareFn,
@@ -68,7 +72,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 	var indexItem []byte
 	var db *dataBlock
 
-	opItr := sOpItr.(*batchOpIterator)
+	opItr := sOpItr.(BatchOpIterator)
 
 	if n.Item() != skiplist.MinItem {
 		dw.w.DeleteNode(n)
@@ -76,7 +80,6 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 		if err != nil {
 			return err
 		}
-
 		db = newDataBlock(dw.rbuf)
 	}
 
@@ -163,19 +166,34 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 	return nil
 }
 
+type batchOpIterator struct {
+	db *Nitro
+	BatchOpIterator
+	itm unsafe.Pointer
+}
+
+func (it *batchOpIterator) fillItem() {
+	srcItm := (*Item)(it.BatchOpIterator.Item())
+	dstItm := it.db.allocItem(len(srcItm.Bytes()), false)
+	copy(dstItm.Bytes(), srcItm.Bytes())
+	dstItm.bornSn = it.db.getCurrSn()
+	it.itm = unsafe.Pointer(dstItm)
+}
+
+func (it *batchOpIterator) Next() {
+	it.BatchOpIterator.Next()
+	it.fillItem()
+}
+
 // TODO: Support multiple shards
-func (m *Nitro) BatchModify(ops []ItemOp) error {
-	sops := make([]batchOp, len(ops))
-	for i, op := range ops {
-		x := m.newItem(op.bs, m.useMemoryMgmt)
-		x.bornSn = m.getCurrSn()
-		sops[i].itm = unsafe.Pointer(x)
-		sops[i].op = op.op
+func (m *Nitro) BatchModify(opItr BatchOpIterator) error {
+	itr := &batchOpIterator{
+		db:              m,
+		BatchOpIterator: opItr,
 	}
 
-	opItr := &batchOpIterator{
-		ops: sops,
+	if itr.Valid() {
+		itr.fillItem()
 	}
-
-	return m.store.ExecBatchOps(opItr, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
+	return m.store.ExecBatchOps(itr, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
 }

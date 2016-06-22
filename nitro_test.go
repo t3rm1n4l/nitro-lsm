@@ -12,7 +12,6 @@ package nitro
 import "fmt"
 import "sync/atomic"
 import "os"
-import "sort"
 import "testing"
 import "time"
 import "math/rand"
@@ -33,32 +32,42 @@ func init() {
 func TestBatchOps(t *testing.T) {
 	testConf.blockStoreDir = "/tmp/"
 	db := NewWithConfig(testConf)
-	defer db.Close()
+	//defer db.Close()
 
 	n := 5000000
 
 	var snap *Snapshot
 
 	for x := 0; x < 10; x++ {
-
 		keys := make([]int, n)
-		ops := make([]ItemOp, n)
+		cf := DefaultConfig()
+		cf.UseMemoryMgmt(mm.Malloc, mm.Free)
+		tdb := NewWithConfig(cf)
+		w := tdb.NewWriter()
+
 		for i := 0; i < n; i++ {
-			keys[i] = i
+			//hh := rand.Int() % 5000000
+			hh := i
+			w.Put([]byte(fmt.Sprintf("%010d", hh)))
+			keys[i] = hh
 		}
 
-		sort.Ints(keys)
-		for i := 0; i < n; i++ {
-			ops[i] = ItemOp{bs: []byte(fmt.Sprintf("%010d", keys[i])), op: itemInsertop}
-		}
+		snp, _ := tdb.NewSnapshot()
+		itr := NewOpIterator(snp.NewIterator())
+		snp.Close()
 
 		t0 := time.Now()
-		fmt.Println(db.BatchModify(ops))
+		fmt.Println(db.BatchModify(itr))
+		itr.Close()
+		tdb.Close()
+
 		fmt.Println("thr", float64(n)/float64(time.Since(t0).Seconds()))
 		if snap != nil {
 			snap.Close()
 		}
 		snap, _ = db.NewSnapshot()
+
+		//fmt.Println(db.DumpStats())
 
 		it := snap.NewIterator()
 		i := 0
@@ -70,15 +79,17 @@ func TestBatchOps(t *testing.T) {
 			i++
 		}
 
-		exp := fmt.Sprintf("%010d", 1000)
-		it.Seek([]byte(exp))
-		for i := 1000; i < 2000; i++ {
-			exp := fmt.Sprintf("%010d", i)
-			if string(it.Get()) != exp {
-				t.Errorf("%s", string(it.Get()))
+		/*
+			exp := fmt.Sprintf("%010d", 1000)
+			it.Seek([]byte(exp))
+			for i := 1000; i < 2000; i++ {
+				exp := fmt.Sprintf("%010d", keys[i])
+				if string(it.Get()) != exp {
+					t.Errorf("%s != %s", string(it.Get()), string(exp))
+				}
+				it.Next()
 			}
-			it.Next()
-		}
+		*/
 
 		var wg sync.WaitGroup
 		t0 = time.Now()
