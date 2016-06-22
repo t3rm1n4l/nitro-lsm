@@ -52,7 +52,12 @@ func (it *nodeOpIterator) Next() {
 }
 
 func (it *nodeOpIterator) Op() itemOp {
-	return itemInsertop
+	itm := (*Item)(it.Iterator.GetNode().Item())
+	if itm.bornSn != 0 {
+		return itemInsertop
+	} else {
+		return itemDeleteOp
+	}
 }
 
 func (it *nodeOpIterator) Close() {
