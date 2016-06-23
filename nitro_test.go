@@ -200,19 +200,15 @@ func doGet(t *testing.T, db *Nitro, snap *Snapshot, wg *sync.WaitGroup, n int) {
 	defer wg.Done()
 	rnd := rand.New(rand.NewSource(int64(rand.Int())))
 
-	//buf := make([]byte, 8)
+	buf := make([]byte, 8)
 	itr := db.NewIterator(snap)
 	defer itr.Close()
 	for i := 0; i < n; i++ {
 		val := rnd.Int() % n
-		//	binary.BigEndian.PutUint64(buf, uint64(val))
-		exp := fmt.Sprintf("%010d", val)
-		itr.Seek([]byte(exp))
+		binary.BigEndian.PutUint64(buf, uint64(val))
+		itr.Seek(buf)
 		if !itr.Valid() {
 			t.Errorf("Expected to find %v", val)
-		}
-		if exp != string(itr.Get()) {
-			panic(string(itr.Get()))
 		}
 	}
 	itr.Close()
