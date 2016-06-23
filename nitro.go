@@ -339,6 +339,9 @@ func (cfg *Config) SetKeyComparator(cmp KeyCompare) {
 	cfg.iterCmp = newIterCompare(cmp)
 	cfg.existCmp = newExistCompare(cmp)
 }
+func (cfg *Config) SetBlockStoreDir(p string) {
+	cfg.blockStoreDir = p
+}
 
 func (cfg *Config) HasBlockStore() bool {
 	return cfg.blockStoreDir != ""
