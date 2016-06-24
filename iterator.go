@@ -77,7 +77,9 @@ func (it *Iterator) SeekFirst() {
 // exist.
 func (it *Iterator) Seek(bs []byte) {
 	itm := it.snap.db.newItem(bs, false)
-	it.iter.SeekPrev(unsafe.Pointer(itm))
+	if it.snap.db.HasBlockStore() {
+		it.iter.SeekPrev(unsafe.Pointer(itm))
+	}
 	it.skipUnwanted()
 	it.seek(bs)
 }
