@@ -111,6 +111,10 @@ func (it *Iterator) Next() {
 		return
 	}
 
+	if !it.Valid() {
+		return
+	}
+
 retry:
 	it.valid = true
 	next, deleted := it.curr.getNext(0)
