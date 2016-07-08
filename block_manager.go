@@ -89,6 +89,10 @@ func newFileBlockManager(nfiles int, path string) (*fileBlockManager, error) {
 
 func (fbm *fileBlockManager) DeleteBlock(bptr blockPtr) error {
 	shard := bptr.Shard()
+	if useLinuxHolePunch {
+		return punchHole(fbm.wfds[shard], bptr.Offset(), blockSize)
+	}
+
 	fbm.wlocks[shard].Lock()
 	defer fbm.wlocks[shard].Unlock()
 	fbm.freeBlocks[shard] = append(fbm.freeBlocks[shard], bptr.Offset())
@@ -102,7 +106,7 @@ func (fbm *fileBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) 
 	var pos int64
 
 	flist := fbm.freeBlocks[shard]
-	if len(flist) > 0 {
+	if !useLinuxHolePunch && len(flist) > 0 {
 		pos = flist[len(flist)-1]
 		flist = flist[0 : len(flist)-1]
 		fbm.freeBlocks[shard] = flist
