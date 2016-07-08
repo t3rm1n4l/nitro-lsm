@@ -86,6 +86,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 			return err
 		}
 		db = newDataBlock(dw.rbuf)
+		dw.w.bm.DeleteBlock(blockPtr(n.DataPtr))
 	}
 
 	wblock := newDataBlock(dw.wbuf)
