@@ -125,6 +125,7 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 
 	fmt.Println("newsnap", m.mstore.MemoryInUse(), m.MaxMStoreSize, len(m.snaps))
 	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
+		snap.Open()
 		m.snaps = append([]*nitro.Snapshot{msnap}, m.snaps...)
 		mstoreOld := m.mstore
 		m.mstore = nitro.New()
@@ -134,7 +135,6 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 		m.execMerge(msnap, mstoreOld)
 	}
 
-	snap.Open()
 	return snap, nil
 }
 
