@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+var useLinuxHolePunch = false
+
 // TODO: Reopen fds on error
 type BlockManager interface {
 	DeleteBlock(bptr blockPtr) error
