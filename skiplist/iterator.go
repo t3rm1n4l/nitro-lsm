@@ -68,7 +68,7 @@ func (it *Iterator) Seek(itm unsafe.Pointer) bool {
 }
 
 func (it *Iterator) SeekPrev(itm unsafe.Pointer) {
-	if !it.Seek(itm) {
+	if !it.Seek(itm) && it.prev != it.s.head {
 		it.curr = it.prev
 		it.prev = nil
 	}
