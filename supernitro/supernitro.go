@@ -122,6 +122,9 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 	}
 	snap.snaps = append(snap.snaps, msnap)
 	snap.snaps = append(snap.snaps, m.snaps...)
+	for _, snap := range m.snaps {
+		snap.Open()
+	}
 
 	fmt.Println("newsnap", m.mstore.MemoryInUse(), m.MaxMStoreSize, len(m.snaps))
 	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
