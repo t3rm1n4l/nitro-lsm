@@ -98,7 +98,8 @@ func (it *Iterator) next() []byte {
 	curr := hi.itm
 	hi.iter.Next()
 	if hi.iter.Valid() {
-		hi.itm = hi.iter.Get()
+		// Make explicit copy. Iterator may share the buffer
+		hi.itm = append([]byte(nil), hi.iter.Get()...)
 		heap.Push(&it.h, hi)
 	}
 
