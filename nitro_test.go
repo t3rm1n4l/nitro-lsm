@@ -104,9 +104,9 @@ func TestBatchOps(t *testing.T) {
 		fmt.Printf("%d items took %v -> %v items/s\n", total, dur, float64(total)/float64(dur.Seconds()))
 
 		it.Close()
+		snap.Close()
 	}
 
-	snap.Close()
 	snap, _ = db.NewSnapshot()
 	fmt.Println(db.DumpStats())
 	snap.Close()
@@ -211,7 +211,6 @@ func doGet(t *testing.T, db *Nitro, snap *Snapshot, wg *sync.WaitGroup, n int) {
 			t.Errorf("Expected to find %v", val)
 		}
 	}
-	itr.Close()
 }
 
 func TestInsertDuplicates(t *testing.T) {
