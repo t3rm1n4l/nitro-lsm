@@ -721,13 +721,13 @@ func (m *Nitro) freeWorker(w *Writer) {
 			dnode := n
 			n = n.GClink
 
+			if m.HasBlockStore() {
+				m.bm.DeleteBlock(blockPtr(dnode.DataPtr))
+			}
+
 			itm := (*Item)(dnode.Item())
 			m.freeItem(itm)
-
-			if m.HasBlockStore() {
-				m.store.FreeNode(dnode, &w.slSts3)
-				m.bm.DeleteBlock(blockPtr(n.DataPtr))
-			}
+			m.store.FreeNode(dnode, &w.slSts3)
 		}
 
 		m.store.Stats.Merge(&w.slSts3)
