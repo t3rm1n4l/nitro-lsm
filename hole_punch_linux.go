@@ -10,7 +10,6 @@
 package nitro
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
 	"syscall"
