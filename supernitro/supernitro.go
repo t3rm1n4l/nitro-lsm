@@ -3,18 +3,24 @@ package supernitro
 import (
 	"fmt"
 	"github.com/t3rm1n4l/nitro"
+	"github.com/t3rm1n4l/nitro/mm"
 	"sync"
 )
 
 type Config struct {
 	MaxMStoreSize  int64
 	BlockstorePath string
+	NitroConfig    nitro.Config
 }
 
 func DefaultConfig() Config {
+	ncfg := nitro.DefaultConfig()
+	ncfg.UseMemoryMgmt(mm.Malloc, mm.Free)
+
 	return Config{
 		MaxMStoreSize:  1 * 1024 * 1024,
 		BlockstorePath: ".",
+		NitroConfig:    ncfg,
 	}
 }
 
@@ -33,7 +39,7 @@ type SuperNitro struct {
 func New() *SuperNitro {
 	return &SuperNitro{
 		Config: DefaultConfig(),
-		mstore: nitro.New(),
+		mstore: nitro.NewWithConfig(DefaultConfig().NitroConfig),
 	}
 }
 
@@ -80,14 +86,13 @@ func (m *SuperNitro) NewIterator(snap *Snapshot) *Iterator {
 
 func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 	fmt.Println("execMerge")
-	msnap.Open()
 	go func() {
-		defer msnap.Close()
+		defer store.Close()
 		// Perform merge operation
 		itr := msnap.NewIterator()
 		defer itr.Close()
 		if m.dstore == nil {
-			dcfg := nitro.DefaultConfig()
+			dcfg := m.Config.NitroConfig
 			dcfg.SetBlockStoreDir(m.Config.BlockstorePath)
 			m.dstore = nitro.NewWithConfig(dcfg)
 		}
@@ -99,15 +104,16 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 			panic(err)
 		}
 
-		m.Lock()
+		func() {
+			m.Lock()
+			defer m.Unlock()
 
-		for _, snap := range m.snaps {
-			snap.Close()
-		}
+			for _, snap := range m.snaps {
+				snap.Close()
+			}
 
-		m.snaps = []*nitro.Snapshot{dsnap}
-		m.Unlock()
-		store.Close()
+			m.snaps = []*nitro.Snapshot{dsnap}
+		}()
 	}()
 }
 
@@ -120,18 +126,18 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap.snaps = append(snap.snaps, msnap)
-	snap.snaps = append(snap.snaps, m.snaps...)
+	snaps := append([]*nitro.Snapshot{msnap}, m.snaps...)
 	for _, snap := range m.snaps {
 		snap.Open()
 	}
+	snap.snaps = snaps
 
 	fmt.Println("newsnap", m.mstore.MemoryInUse(), m.MaxMStoreSize, len(m.snaps))
 	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
-		snap.Open()
-		m.snaps = append([]*nitro.Snapshot{msnap}, m.snaps...)
+		msnap.Open()
+		m.snaps = snaps
 		mstoreOld := m.mstore
-		m.mstore = nitro.New()
+		m.mstore = nitro.NewWithConfig(m.Config.NitroConfig)
 		for _, wr := range m.wrlist {
 			wr.mw = m.mstore.NewWriter()
 		}
