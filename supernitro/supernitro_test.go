@@ -99,45 +99,97 @@ func TestInsert(t *testing.T) {
 	}
 }
 
-func doInsert(db *SuperNitro, wg *sync.WaitGroup, n int, isRand bool, shouldSnap bool) {
+func doInsert(id int, db *SuperNitro, ch chan bool, wg *sync.WaitGroup, n int, isRand bool, shouldSnap bool) {
 	defer wg.Done()
 	w := db.NewWriter()
 	rnd := rand.New(rand.NewSource(int64(rand.Int())))
 	for i := 0; i < n; i++ {
 		var val int
 		if isRand {
-			val = rnd.Int()
+			val = rnd.Int()%1000000000 + id*10000000000
 		} else {
 			val = i
 		}
 		if shouldSnap && i%100000 == 0 {
-			s, _ := w.NewSnapshot()
-			s.Close()
+			ch <- true
+			<-ch
 		}
 		buf := make([]byte, 8)
 		binary.BigEndian.PutUint64(buf, uint64(val))
-		w.Put(buf)
+		if val%runtime.GOMAXPROCS(0) == id {
+			w.Put(buf)
+		}
 	}
 }
 
 func TestInsertPerf(t *testing.T) {
 	var wg sync.WaitGroup
 	db := New()
-	defer db.Close()
+	//defer db.Close()
 	n := 20000000 / runtime.GOMAXPROCS(0)
 	t0 := time.Now()
 	total := n * runtime.GOMAXPROCS(0)
+	ch := make([]chan bool, runtime.GOMAXPROCS(0))
+	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+		ch[i] = make(chan bool)
+	}
+	go func() {
+
+		for {
+			for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+				<-ch[i]
+			}
+			snap, _ := db.NewSnapshot()
+			snap.Close()
+
+			for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+				ch[i] <- true
+			}
+		}
+	}()
+
 	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 		wg.Add(1)
-		go doInsert(db, &wg, n, true, true)
+		go doInsert(i, db, ch[i], &wg, n, true, true)
+		//go doInsert(i, db, ch[i], &wg, total, false, true)
 	}
 	wg.Wait()
 
 	snap, _ := db.NewSnapshot()
-	defer snap.Close()
 	dur := time.Since(t0)
 	fmt.Printf("%d items took %v -> %v items/s\n",
 		total, dur, float64(total)/float64(dur.Seconds()))
+
+	itr := db.NewIterator(snap)
+	fmt.Println("snap", snap)
+	c := 0
+	x := uint64(0)
+	for itr.SeekFirst(); itr.Valid(); itr.Next() {
+		v := binary.BigEndian.Uint64(itr.Get())
+		if v < x {
+			//panic(fmt.Sprint(x, v))
+			fmt.Println("bad", x, v)
+		}
+		//		fmt.Println(v)
+		x = v
+		c++
+	}
+	fmt.Println("count", c)
+
+	/*
+		itr1 := snap.snaps[0].NewIterator()
+		for itr1.SeekFirst(); itr1.Valid(); itr1.Next() {
+			fmt.Println("first", binary.BigEndian.Uint64(itr1.Get()))
+		}
+		fmt.Println("")
+
+		itr1 = snap.snaps[1].NewIterator()
+		for itr1.SeekFirst(); itr1.Valid(); itr1.Next() {
+			fmt.Println("second", binary.BigEndian.Uint64(itr1.Get()))
+		}
+	*/
+	itr.Close()
+	snap.Close()
 }
 
 func doGet(t *testing.T, db *SuperNitro, snap *Snapshot, wg *sync.WaitGroup, n int) {
@@ -160,7 +212,6 @@ func doGet(t *testing.T, db *SuperNitro, snap *Snapshot, wg *sync.WaitGroup, n i
 			panic(string(itr.Get()))
 		}
 	}
-	itr.Close()
 }
 
 func TestGetPerf(t *testing.T) {
@@ -169,7 +220,7 @@ func TestGetPerf(t *testing.T) {
 	defer db.Close()
 	n := 1000000
 	wg.Add(1)
-	go doInsert(db, &wg, n, false, true)
+	go doInsert(0, db, make(chan bool), &wg, n, false, true)
 	wg.Wait()
 	snap, _ := db.NewSnapshot()
 	defer snap.Close()
