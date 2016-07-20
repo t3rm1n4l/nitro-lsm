@@ -197,6 +197,17 @@ func (it *batchOpIterator) Item() unsafe.Pointer {
 	return it.itm
 }
 
+func isValidNode(n *skiplist.Node) bool {
+	itm := n.Item()
+
+	// TODO: move this check to skiplist module
+	if itm != skiplist.MaxItem {
+		return (*Item)(itm).deadSn == 0
+	}
+
+	return true
+}
+
 // TODO: Support multiple shards
 func (m *Nitro) BatchModify(opItr BatchOpIterator) error {
 	itr := &batchOpIterator{
@@ -207,5 +218,5 @@ func (m *Nitro) BatchModify(opItr BatchOpIterator) error {
 	if itr.Valid() {
 		itr.fillItem()
 	}
-	return m.store.ExecBatchOps(itr, m.shardWrs[0].batchModifyCallback, m.insCmp, &m.store.Stats)
+	return m.store.ExecBatchOps(itr, m.shardWrs[0].batchModifyCallback, m.insCmp, isValidNode, &m.store.Stats)
 }
