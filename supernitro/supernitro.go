@@ -5,6 +5,7 @@ import (
 	"github.com/t3rm1n4l/nitro"
 	"github.com/t3rm1n4l/nitro/mm"
 	"sync"
+	"sync/atomic"
 )
 
 type Config struct {
@@ -34,6 +35,8 @@ type SuperNitro struct {
 	snaps []*nitro.Snapshot
 
 	wrlist []*Writer
+
+	isMergeRunning int32
 }
 
 func New() *SuperNitro {
@@ -113,6 +116,7 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 			}
 
 			m.snaps = []*nitro.Snapshot{dsnap}
+			atomic.CompareAndSwapInt32(&m.isMergeRunning, 1, 0)
 		}()
 	}()
 }
@@ -133,7 +137,7 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 	snap.snaps = snaps
 
 	fmt.Println("newsnap", m.mstore.MemoryInUse(), m.MaxMStoreSize, len(m.snaps))
-	if m.mstore.MemoryInUse() > m.MaxMStoreSize && len(m.snaps) < 2 {
+	if m.mstore.MemoryInUse() > m.MaxMStoreSize && atomic.CompareAndSwapInt32(&m.isMergeRunning, 0, 1) {
 		msnap.Open()
 		m.snaps = snaps
 		mstoreOld := m.mstore
