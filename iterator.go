@@ -54,18 +54,6 @@ func (it *Iterator) loadItems() {
 	}
 }
 
-func (it *Iterator) seek(bs []byte) {
-	if it.snap.db.HasBlockStore() {
-		it.loadItems()
-		for ; it.curr != nil && it.snap.db.keyCmp(it.curr, bs) < 0; it.curr = it.block.Get() {
-		}
-
-		if it.curr == nil {
-			it.Next()
-		}
-	}
-}
-
 // SeekFirst moves cursor to the beginning
 func (it *Iterator) SeekFirst() {
 	it.iter.SeekFirst()
@@ -79,9 +67,19 @@ func (it *Iterator) Seek(bs []byte) {
 	itm := it.snap.db.newItem(bs, false)
 	if it.snap.db.HasBlockStore() {
 		it.iter.SeekPrev(unsafe.Pointer(itm))
+		it.skipUnwanted()
+
+		it.loadItems()
+		for ; it.curr != nil && it.snap.db.keyCmp(it.curr, bs) < 0; it.curr = it.block.Get() {
+		}
+
+		if it.curr == nil {
+			it.Next()
+		}
+	} else {
+		it.iter.Seek(unsafe.Pointer(itm))
+		it.skipUnwanted()
 	}
-	it.skipUnwanted()
-	it.seek(bs)
 }
 
 // Valid eturns false when the iterator has reached the end.
