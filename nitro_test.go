@@ -818,3 +818,31 @@ func TestCloseWithActiveIterators(t *testing.T) {
 	wg.Wait()
 
 }
+
+func TestSimpleGet(t *testing.T) {
+	db := NewWithConfig(testConf)
+	w := db.NewWriter()
+
+	n := 1000000
+	buf := make([]byte, 8)
+	for i := 0; i < n; i++ {
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		w.Put(buf)
+	}
+
+	snap, _ := w.NewSnapshot()
+	itr := snap.NewIterator()
+	for i := 0; i < n; i++ {
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		itr.Seek(buf)
+		if !itr.Valid() {
+			t.Errorf("invalid item %v, %v", i, buf)
+			continue
+		}
+
+		x := binary.BigEndian.Uint64(itr.Get())
+		if uint64(i) != x {
+			t.Errorf("Failed to lookup %d, got %d", i, x)
+		}
+	}
+}
