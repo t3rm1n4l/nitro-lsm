@@ -29,6 +29,15 @@ type Iterator struct {
 	curr  []byte
 }
 
+func (it *Iterator) skipItem(ptr unsafe.Pointer) bool {
+	itm := (*Item)(ptr)
+	if ptr != skiplist.MaxItem && itm.bornSn > it.snap.sn {
+		return true
+	}
+
+	return false
+}
+
 func (it *Iterator) skipUnwanted() {
 loop:
 	if !it.iter.Valid() {
@@ -43,7 +52,7 @@ loop:
 }
 
 func (it *Iterator) loadItems() {
-	if it.snap.db.HasBlockStore() {
+	if it.snap.db.HasBlockStore() && it.iter.Valid() {
 		n := it.GetNode()
 		if err := it.snap.db.bm.ReadBlock(blockPtr(n.DataPtr), it.blockBuf); err != nil {
 			panic(err)
@@ -66,9 +75,8 @@ func (it *Iterator) SeekFirst() {
 func (it *Iterator) Seek(bs []byte) {
 	itm := it.snap.db.newItem(bs, false)
 	if it.snap.db.HasBlockStore() {
-		it.iter.SeekPrev(unsafe.Pointer(itm))
+		it.iter.SeekPrev(unsafe.Pointer(itm), it.skipItem)
 		it.skipUnwanted()
-
 		it.loadItems()
 		for ; it.curr != nil && it.snap.db.keyCmp(it.curr, bs) < 0; it.curr = it.block.Get() {
 		}
@@ -102,7 +110,7 @@ func (it *Iterator) GetNode() *skiplist.Node {
 
 // Next moves iterator cursor to the next item
 func (it *Iterator) Next() {
-	if it.snap.db.HasBlockStore() {
+	if it.snap.db.HasBlockStore() && it.iter.Valid() {
 		if it.curr = it.block.Get(); it.curr != nil {
 			return
 		}

@@ -188,6 +188,12 @@ func (s *Skiplist) helpDelete(level int, prev, curr, next *Node, sts *Stats) boo
 }
 
 func (s *Skiplist) findPath(itm unsafe.Pointer, cmp CompareFn,
+	buf *ActionBuffer, sts *Stats) *Node {
+	return s.findPath2(itm, cmp, nil, buf, sts)
+}
+
+func (s *Skiplist) findPath2(itm unsafe.Pointer, cmp CompareFn,
+	skipItm func(unsafe.Pointer) bool,
 	buf *ActionBuffer, sts *Stats) (foundNode *Node) {
 	var cmpVal = 1
 
@@ -198,15 +204,23 @@ retry:
 		curr, _ := prev.getNext(i)
 	levelSearch:
 		for {
+		skip:
+			pred := prev
 			next, deleted := curr.getNext(i)
 			for deleted {
-				if !s.helpDelete(i, prev, curr, next, sts) {
+				if !s.helpDelete(i, pred, curr, next, sts) {
 					sts.AddUint64(&sts.readConflicts, 1)
 					goto retry
 				}
 
-				curr, _ = prev.getNext(i)
+				curr, _ = pred.getNext(i)
 				next, deleted = curr.getNext(i)
+			}
+
+			if skipItm != nil && skipItm(curr.Item()) {
+				pred = curr
+				curr = next
+				goto skip
 			}
 
 			cmpVal = Compare(cmp, curr.Item(), itm)

@@ -58,17 +58,24 @@ func (it *Iterator) SeekWithCmp(itm unsafe.Pointer, cmp CompareFn, eqCmp Compare
 	return found
 }
 
-// Seek moves iterator to a provided item
-func (it *Iterator) Seek(itm unsafe.Pointer) bool {
+// SeekWithSkip performs Seek() with optional skipping of nodes while reading nodes as part of
+// finding the item.
+func (it *Iterator) SeekWithSkip(itm unsafe.Pointer, skipItm func(unsafe.Pointer) bool) bool {
 	it.valid = true
-	found := it.s.findPath(itm, it.cmp, it.buf, &it.s.Stats) != nil
+	found := it.s.findPath2(itm, it.cmp, skipItm, it.buf, &it.s.Stats) != nil
 	it.prev = it.buf.preds[0]
 	it.curr = it.buf.succs[0]
 	return found
 }
 
-func (it *Iterator) SeekPrev(itm unsafe.Pointer) {
-	if !it.Seek(itm) && it.prev != it.s.head {
+// Seek moves iterator to a provided item
+func (it *Iterator) Seek(itm unsafe.Pointer) bool {
+	return it.SeekWithSkip(itm, nil)
+}
+
+// SeekPrev moves iterator to the provided item or an item less than the lookup item
+func (it *Iterator) SeekPrev(itm unsafe.Pointer, skip func(unsafe.Pointer) bool) {
+	if !it.SeekWithSkip(itm, skip) && it.prev != it.s.head {
 		it.curr = it.prev
 		it.prev = nil
 	}
