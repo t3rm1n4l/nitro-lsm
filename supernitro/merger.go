@@ -63,7 +63,7 @@ func (it *Iterator) Seek(itm []byte) {
 			subIt.Seek(itm)
 		}
 		if subIt.Valid() {
-			itm := subIt.Get()
+			itm := append([]byte(nil), subIt.Get()...)
 			it.h = append(it.h, itmVal{iter: subIt, itm: itm, prio: prio})
 		}
 	}
