@@ -30,9 +30,10 @@ func init() {
 }
 
 func TestBatchOps(t *testing.T) {
-	testConf.blockStoreDir = "/tmp/"
-	db := NewWithConfig(testConf)
-	//defer db.Close()
+	conf := testConf
+	conf.blockStoreDir = "/tmp/"
+	db := NewWithConfig(conf)
+	defer db.Close()
 
 	n := 5000000
 
