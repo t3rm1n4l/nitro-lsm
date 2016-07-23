@@ -73,6 +73,11 @@ func (it *Iterator) SeekFirst() {
 // Seek to a specified key or the next bigger one if an item with key does not
 // exist.
 func (it *Iterator) Seek(bs []byte) {
+	if bs == nil {
+		it.SeekFirst()
+		return
+	}
+
 	itm := it.snap.db.newItem(bs, false)
 	if it.snap.db.HasBlockStore() {
 		it.iter.SeekPrev(unsafe.Pointer(itm), it.skipItem)

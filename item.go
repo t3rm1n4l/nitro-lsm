@@ -93,6 +93,10 @@ func (m *Nitro) DecodeItem(buf []byte, r io.Reader) (*Item, error) {
 
 // Bytes return item data bytes
 func (itm *Item) Bytes() (bs []byte) {
+	if itm == nil {
+		return
+	}
+
 	l := itm.dataLen
 	dataOffset := uintptr(unsafe.Pointer(itm)) + itemHeaderSize
 
