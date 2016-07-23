@@ -27,6 +27,8 @@ type Iterator struct {
 
 	block dataBlock
 	curr  []byte
+
+	endItm *Item
 }
 
 func (it *Iterator) skipItem(ptr unsafe.Pointer) bool {
@@ -95,9 +97,20 @@ func (it *Iterator) Seek(bs []byte) {
 	}
 }
 
-// Valid eturns false when the iterator has reached the end.
+func (it *Iterator) SetEnd(itm *Item) {
+	it.endItm = itm
+}
+
+// Valid returns false when the iterator has reached the end.
 func (it *Iterator) Valid() bool {
-	return it.iter.Valid()
+	if it.iter.Valid() {
+		if it.endItm != nil && it.snap.db.insCmp(it.iter.Get(), unsafe.Pointer(it.endItm)) >= 0 {
+			return false
+		}
+		return true
+	}
+
+	return false
 }
 
 // Get eturns the current item data from the iterator.
