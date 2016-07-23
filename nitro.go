@@ -796,7 +796,6 @@ func (m *Nitro) ptrToItem(itmPtr unsafe.Pointer) *Item {
 // Number of concurrent worker threads used can be specified.
 func (m *Nitro) Visitor(snap *Snapshot, callb VisitorCallback, shards int, concurrency int) error {
 	var wg sync.WaitGroup
-	var pivotItems []*Item
 
 	wch := make(chan int, shards)
 
@@ -804,33 +803,7 @@ func (m *Nitro) Visitor(snap *Snapshot, callb VisitorCallback, shards int, concu
 		panic("snapshot cannot be nil")
 	}
 
-	func() {
-		tmpIter := m.NewIterator(snap)
-		if tmpIter == nil {
-			panic("iterator cannot be nil")
-		}
-		defer tmpIter.Close()
-
-		barrier := m.store.GetAccesBarrier()
-		token := barrier.Acquire()
-		defer barrier.Release(token)
-
-		pivotItems = append(pivotItems, nil) // start item
-		pivotPtrs := m.store.GetRangeSplitItems(shards)
-		for _, itmPtr := range pivotPtrs {
-			itm := m.ptrToItem(itmPtr)
-			tmpIter.Seek(itm.Bytes())
-			if tmpIter.Valid() {
-				prevItm := pivotItems[len(pivotItems)-1]
-				// Find bigger item than prev pivot
-				if prevItm == nil || m.insCmp(unsafe.Pointer(itm), unsafe.Pointer(prevItm)) > 0 {
-					pivotItems = append(pivotItems, itm)
-				}
-			}
-		}
-		pivotItems = append(pivotItems, nil) // end item
-	}()
-
+	pivotItems := m.partitionPivots(snap, shards)
 	errors := make([]error, len(pivotItems)-1)
 
 	// Run workers
@@ -850,17 +823,10 @@ func (m *Nitro) Visitor(snap *Snapshot, callb VisitorCallback, shards int, concu
 				defer itr.Close()
 
 				itr.SetRefreshRate(m.refreshRate)
-				if startItem == nil {
-					itr.SeekFirst()
-				} else {
-					itr.Seek(startItem.Bytes())
-				}
-			loop:
-				for ; itr.Valid(); itr.Next() {
-					if endItem != nil && m.insCmp(itr.GetNode().Item(), unsafe.Pointer(endItem)) >= 0 {
-						break loop
-					}
+				itr.Seek(startItem.Bytes())
+				itr.SetEnd(endItem)
 
+				for ; itr.Valid(); itr.Next() {
 					itm := (*Item)(itr.GetNode().Item())
 					if err := callb(itm, shard); err != nil {
 						errors[shard] = err
