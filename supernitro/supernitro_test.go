@@ -218,20 +218,57 @@ func TestGetPerf(t *testing.T) {
 	var wg sync.WaitGroup
 	db := New()
 	defer db.Close()
-	n := 1000000
+	n := 1000
 	wg.Add(1)
-	go doInsert(0, db, make(chan bool), &wg, n, false, true)
+	go doInsert(0, db, make(chan bool), &wg, n, false, false)
 	wg.Wait()
 	snap, _ := db.NewSnapshot()
 	defer snap.Close()
 
+	fmt.Println("built index")
+
 	t0 := time.Now()
 	total := n * runtime.GOMAXPROCS(0)
-	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
-		wg.Add(1)
-		go doGet(t, db, snap, &wg, n)
-	}
-	wg.Wait()
+	//for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+	wg.Add(1)
+	//	go doGet(t, db, snap, &wg, n)
+	//}
+	//wg.Wait()
+	doGet(t, db, snap, &wg, n)
 	dur := time.Since(t0)
 	fmt.Printf("%d items took %v -> %v items/s\n", total, dur, float64(total)/float64(dur.Seconds()))
+}
+
+func TestSimpleGet(t *testing.T) {
+	db := New()
+	w := db.NewWriter()
+
+	n := 1000000
+	buf := make([]byte, 8)
+	for i := 0; i < n; i++ {
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		w.Put(buf)
+		if i%100000 == 0 {
+			snap, _ := w.NewSnapshot()
+			snap.Close()
+			time.Sleep(time.Second)
+		}
+	}
+
+	snap, _ := w.NewSnapshot()
+	itr := db.NewIterator(snap)
+
+	for i := 0; i < n; i++ {
+		binary.BigEndian.PutUint64(buf, uint64(i))
+		itr.Seek(buf)
+		if !itr.Valid() {
+			t.Errorf("invalid %v buf:%v", i, buf)
+			continue
+		}
+
+		x := binary.BigEndian.Uint64(itr.Get())
+		if uint64(i) != x {
+			t.Errorf("failed to lookup %v, got %v", i, x)
+		}
+	}
 }
