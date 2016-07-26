@@ -39,7 +39,6 @@ func NewOpIterator(itr *Iterator) BatchOpIterator {
 		Iterator: itr,
 	}
 
-	itr.SeekFirst()
 	return it
 }
 
@@ -208,15 +207,54 @@ func isValidNode(n *skiplist.Node) bool {
 	return true
 }
 
-// TODO: Support multiple shards
-func (m *Nitro) BatchModify(opItr BatchOpIterator) error {
-	itr := &batchOpIterator{
+func (m *Nitro) newBatchOpIterator(it *Iterator) BatchOpIterator {
+	bItr := &batchOpIterator{
 		db:              m,
-		BatchOpIterator: opItr,
+		BatchOpIterator: NewOpIterator(it),
 	}
 
-	if itr.Valid() {
-		itr.fillItem()
+	if bItr.Valid() {
+		bItr.fillItem()
 	}
-	return m.store.ExecBatchOps(itr, m.shardWrs[0].batchModifyCallback, m.insCmp, isValidNode, &m.store.Stats)
+	return bItr
+}
+
+func (m *Nitro) ApplyOps(snap *Snapshot, concurr int) error {
+	var err error
+	w := m.NewWriter()
+	currSnap := &Snapshot{db: m, sn: m.getCurrSn(), refCount: 10}
+	pivots := m.partitionPivots(currSnap, concurr)
+
+	errors := make([]chan error, len(pivots)-1)
+
+	for i := 0; i < len(pivots)-1; i++ {
+		errors[i] = make(chan error, 1)
+		itr := snap.NewIterator()
+		itr.Seek(pivots[i].Bytes())
+		itr.SetEnd(pivots[i+1].Bytes())
+		opItr := m.newBatchOpIterator(itr)
+		head := w.GetNode(pivots[i].Bytes())
+		tail := w.GetNode(pivots[i+1].Bytes())
+
+		if pivots[i] == nil {
+			head = nil
+		}
+
+		if pivots[i+1] == nil {
+			tail = nil
+		}
+
+		go func(id int, opItr BatchOpIterator, head, tail *skiplist.Node) {
+			errors[id] <- m.store.ExecBatchOps(opItr, head, tail, m.shardWrs[id].batchModifyCallback, m.insCmp, isValidNode, &m.store.Stats)
+			opItr.Close()
+		}(i, opItr, head, tail)
+	}
+
+	for i := 0; i < len(pivots)-1; i++ {
+		if e := <-errors[i]; e != nil {
+			err = e
+		}
+	}
+
+	return err
 }

@@ -97,14 +97,16 @@ func (it *Iterator) Seek(bs []byte) {
 	}
 }
 
-func (it *Iterator) SetEnd(itm *Item) {
-	it.endItm = itm
+func (it *Iterator) SetEnd(bs []byte) {
+	if len(bs) > 0 {
+		it.endItm = it.snap.db.newItem(bs, false)
+	}
 }
 
 // Valid returns false when the iterator has reached the end.
 func (it *Iterator) Valid() bool {
 	if it.iter.Valid() {
-		if it.endItm != nil && it.snap.db.insCmp(it.iter.Get(), unsafe.Pointer(it.endItm)) >= 0 {
+		if it.endItm != nil && it.snap.db.iterCmp(it.iter.Get(), unsafe.Pointer(it.endItm)) >= 0 {
 			return false
 		}
 		return true

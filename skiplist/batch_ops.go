@@ -20,14 +20,29 @@ func defaultValidNode(*Node) bool {
 	return true
 }
 
-func (s *Skiplist) ExecBatchOps(opItr BatchOpIterator, callb BatchOpCallback,
-	cmp CompareFn, validNode ValidNodeFn, sts *Stats) error {
+func (s *Skiplist) ExecBatchOps(opItr BatchOpIterator, head, tail *Node,
+	callb BatchOpCallback, cmp CompareFn,
+	validNode ValidNodeFn, sts *Stats) error {
+
+	// Maxlevel
+	var level int
 
 	if validNode == nil {
 		validNode = defaultValidNode
 	}
 
-	err := s.execBatchOpsInner(s.head, s.tail, int(s.level), opItr,
+	if head == nil {
+		head = s.head
+		level = int(s.level)
+	} else {
+		level = head.Level()
+	}
+
+	if tail == nil {
+		tail = s.tail
+	}
+
+	err := s.execBatchOpsInner(head, tail, level, opItr,
 		cmp, validNode, callb, sts)
 
 	if err != nil {

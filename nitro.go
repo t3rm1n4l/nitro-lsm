@@ -824,7 +824,7 @@ func (m *Nitro) Visitor(snap *Snapshot, callb VisitorCallback, shards int, concu
 
 				itr.SetRefreshRate(m.refreshRate)
 				itr.Seek(startItem.Bytes())
-				itr.SetEnd(endItem)
+				itr.SetEnd(endItem.Bytes())
 
 				for ; itr.Valid(); itr.Next() {
 					itm := (*Item)(itr.GetNode().Item())

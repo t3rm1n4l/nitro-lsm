@@ -12,6 +12,7 @@ type Config struct {
 	MaxMStoreSize  int64
 	BlockstorePath string
 	NitroConfig    nitro.Config
+	Writers        int
 }
 
 func DefaultConfig() Config {
@@ -22,6 +23,7 @@ func DefaultConfig() Config {
 		MaxMStoreSize:  1 * 1024 * 1024,
 		BlockstorePath: ".",
 		NitroConfig:    ncfg,
+		Writers:        8,
 	}
 }
 
@@ -91,17 +93,14 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 	fmt.Println("execMerge")
 	go func() {
 		defer store.Close()
-		// Perform merge operation
-		itr := msnap.NewIterator()
-		defer itr.Close()
 		if m.dstore == nil {
 			dcfg := m.Config.NitroConfig
 			dcfg.SetBlockStoreDir(m.Config.BlockstorePath)
 			m.dstore = nitro.NewWithConfig(dcfg)
 		}
 
-		opItr := nitro.NewOpIterator(itr)
-		m.dstore.BatchModify(opItr)
+		// Perform merge operation
+		m.dstore.ApplyOps(msnap, m.Config.Writers)
 		dsnap, err := m.dstore.NewSnapshot()
 		if err != nil {
 			panic(err)

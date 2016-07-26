@@ -54,12 +54,10 @@ func TestBatchOps(t *testing.T) {
 		}
 
 		snp, _ := tdb.NewSnapshot()
-		itr := NewOpIterator(snp.NewIterator())
-		snp.Close()
 
 		t0 := time.Now()
-		fmt.Println(db.BatchModify(itr))
-		itr.Close()
+		fmt.Println(db.ApplyOps(snp, 8))
+		snp.Close()
 		tdb.Close()
 
 		fmt.Println("thr", float64(n)/float64(time.Since(t0).Seconds()))
