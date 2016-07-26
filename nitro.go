@@ -90,7 +90,8 @@ func DefaultConfig() Config {
 	cfg.fileType = RawdbFile
 	cfg.useMemoryMgmt = false
 	cfg.refreshRate = defaultRefreshRate
-	cfg.storageShards = 1
+	// TOOD: Remove this
+	cfg.storageShards = 48
 	return cfg
 }
 
