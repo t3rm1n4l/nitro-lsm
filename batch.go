@@ -2,6 +2,7 @@ package nitro
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/t3rm1n4l/nitro/skiplist"
 	"unsafe"
 )
@@ -19,6 +20,32 @@ type diskWriter struct {
 	shard      int
 	w          *Writer
 	rbuf, wbuf []byte
+
+	stats BatchOpStats
+}
+
+type BatchOpStats struct {
+	BlocksWritten int64
+	BlocksRemoved int64
+
+	ItemsInserted int64
+	ItemsRemoved  int64
+}
+
+func (b BatchOpStats) String() string {
+	return fmt.Sprintf(
+		"blocks_written = %d\n"+
+			"blocks_removed = %d\n"+
+			"items_inserted = %d\n"+
+			"items_removed  = %d",
+		b.BlocksWritten, b.BlocksRemoved, b.ItemsInserted, b.ItemsRemoved)
+}
+
+func (r *BatchOpStats) ApplyDiff(a, b BatchOpStats) {
+	r.BlocksWritten += a.BlocksWritten - b.BlocksWritten
+	r.BlocksRemoved += a.BlocksRemoved - b.BlocksRemoved
+	r.ItemsInserted += a.ItemsInserted - b.ItemsInserted
+	r.ItemsRemoved += a.ItemsRemoved - b.ItemsRemoved
 }
 
 func (m *Nitro) newDiskWriter(shard int) *diskWriter {
@@ -80,6 +107,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 
 	if n.Item() != skiplist.MinItem {
 		dw.w.DeleteNode(n)
+		dw.stats.BlocksRemoved++
 		err := dw.w.bm.ReadBlock(blockPtr(n.DataPtr), dw.rbuf)
 		if err != nil {
 			return err
@@ -98,6 +126,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 			}
 			indexNode.DataPtr = uint64(bptr)
 			wblock.Reset()
+			dw.stats.BlocksWritten++
 		}
 
 		return err
@@ -108,6 +137,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 			indexItem = itm
 		}
 
+		dw.stats.ItemsInserted++
 		if err := wblock.Write(itm); err == errBlockFull {
 			if err := flushBlock(); err != nil {
 				return err
@@ -133,6 +163,8 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 		case cmpval == 0:
 			if opItr.Op() == itemInsertop {
 				err = doWriteItem(opItm)
+			} else {
+				dw.stats.ItemsRemoved++
 			}
 
 			opItr.Next()
@@ -219,20 +251,26 @@ func (m *Nitro) newBatchOpIterator(it *Iterator) BatchOpIterator {
 	return bItr
 }
 
-func (m *Nitro) ApplyOps(snap *Snapshot, concurr int) error {
+func (m *Nitro) ApplyOps(snap *Snapshot, concurr int) (BatchOpStats, error) {
 	var err error
+	var stats BatchOpStats
+
 	w := m.NewWriter()
-	currSnap := &Snapshot{db: m, sn: m.getCurrSn(), refCount: 10}
+	currSnap := &Snapshot{db: m, sn: m.getCurrSn(), refCount: 1}
 	pivots := m.partitionPivots(currSnap, concurr)
 
+	beforeStats := make([]BatchOpStats, len(pivots)-1)
 	errors := make([]chan error, len(pivots)-1)
 
 	for i := 0; i < len(pivots)-1; i++ {
 		errors[i] = make(chan error, 1)
+		beforeStats[i] = m.shardWrs[i].stats
+
 		itr := snap.NewIterator()
 		itr.Seek(pivots[i].Bytes())
 		itr.SetEnd(pivots[i+1].Bytes())
 		opItr := m.newBatchOpIterator(itr)
+		defer opItr.Close()
 		head := w.GetNode(pivots[i].Bytes())
 		tail := w.GetNode(pivots[i+1].Bytes())
 
@@ -246,7 +284,6 @@ func (m *Nitro) ApplyOps(snap *Snapshot, concurr int) error {
 
 		go func(id int, opItr BatchOpIterator, head, tail *skiplist.Node) {
 			errors[id] <- m.store.ExecBatchOps(opItr, head, tail, m.shardWrs[id].batchModifyCallback, m.insCmp, isValidNode, &m.store.Stats)
-			opItr.Close()
 		}(i, opItr, head, tail)
 	}
 
@@ -254,7 +291,9 @@ func (m *Nitro) ApplyOps(snap *Snapshot, concurr int) error {
 		if e := <-errors[i]; e != nil {
 			err = e
 		}
+
+		stats.ApplyDiff(m.shardWrs[i].stats, beforeStats[i])
 	}
 
-	return err
+	return stats, err
 }
