@@ -50,6 +50,9 @@ func New() *SuperNitro {
 }
 
 func (m *SuperNitro) NewWriter() *Writer {
+	m.Lock()
+	defer m.Unlock()
+
 	w := &Writer{
 		SuperNitro: m,
 		mw:         m.mstore.NewWriter(),
