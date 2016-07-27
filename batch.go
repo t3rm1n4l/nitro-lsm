@@ -137,7 +137,6 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 			indexItem = itm
 		}
 
-		dw.stats.ItemsInserted++
 		if err := wblock.Write(itm); err == errBlockFull {
 			if err := flushBlock(); err != nil {
 				return err
@@ -173,6 +172,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 		default:
 			if opItr.Op() == itemInsertop {
 				err = doWriteItem(opItm)
+				dw.stats.ItemsInserted++
 				opItr.Next()
 			}
 		}

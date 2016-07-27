@@ -106,7 +106,7 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Printf("\nexecMergeStats: took %v\n================%s\n\n", time.Since(t0), stats)
+		fmt.Printf("\nexecMergeStats: took %v\n================\n%s\n\n", time.Since(t0), stats)
 		dsnap, err := m.dstore.NewSnapshot()
 		if err != nil {
 			panic(err)
