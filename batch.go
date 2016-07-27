@@ -29,6 +29,7 @@ type BatchOpStats struct {
 	BlocksRemoved int64
 
 	ItemsInserted int64
+	ItemsWritten  int64
 	ItemsRemoved  int64
 }
 
@@ -37,14 +38,17 @@ func (b BatchOpStats) String() string {
 		"blocks_written = %d\n"+
 			"blocks_removed = %d\n"+
 			"items_inserted = %d\n"+
+			"items_written  = %d\n"+
 			"items_removed  = %d",
-		b.BlocksWritten, b.BlocksRemoved, b.ItemsInserted, b.ItemsRemoved)
+		b.BlocksWritten, b.BlocksRemoved, b.ItemsInserted, b.ItemsWritten,
+		b.ItemsRemoved)
 }
 
 func (r *BatchOpStats) ApplyDiff(a, b BatchOpStats) {
 	r.BlocksWritten += a.BlocksWritten - b.BlocksWritten
 	r.BlocksRemoved += a.BlocksRemoved - b.BlocksRemoved
 	r.ItemsInserted += a.ItemsInserted - b.ItemsInserted
+	r.ItemsWritten += a.ItemsWritten - b.ItemsWritten
 	r.ItemsRemoved += a.ItemsRemoved - b.ItemsRemoved
 }
 
@@ -137,6 +141,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 			indexItem = itm
 		}
 
+		dw.stats.ItemsWritten++
 		if err := wblock.Write(itm); err == errBlockFull {
 			if err := flushBlock(); err != nil {
 				return err
