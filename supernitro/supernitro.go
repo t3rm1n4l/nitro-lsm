@@ -6,6 +6,7 @@ import (
 	"github.com/t3rm1n4l/nitro/mm"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type Config struct {
@@ -120,7 +121,29 @@ func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 	}()
 }
 
+func (m *SuperNitro) Sync() error {
+	for !atomic.CompareAndSwapInt32(&m.isMergeRunning, 0, 1) {
+		time.Sleep(time.Millisecond)
+	}
+	atomic.CompareAndSwapInt32(&m.isMergeRunning, 1, 0)
+
+	snap, err := m.newSnapshot(0)
+	if err == nil {
+		snap.Close()
+	}
+
+	for !atomic.CompareAndSwapInt32(&m.isMergeRunning, 0, 1) {
+		time.Sleep(time.Millisecond)
+	}
+	atomic.CompareAndSwapInt32(&m.isMergeRunning, 1, 0)
+	return err
+}
+
 func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
+	return m.newSnapshot(m.MaxMStoreSize)
+}
+
+func (m *SuperNitro) newSnapshot(MaxMStoreSize int64) (*Snapshot, error) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -136,7 +159,7 @@ func (m *SuperNitro) NewSnapshot() (*Snapshot, error) {
 	snap.snaps = snaps
 
 	fmt.Println("newsnap", m.mstore.MemoryInUse(), m.MaxMStoreSize, len(m.snaps))
-	if m.mstore.MemoryInUse() > m.MaxMStoreSize && atomic.CompareAndSwapInt32(&m.isMergeRunning, 0, 1) {
+	if m.mstore.MemoryInUse() > MaxMStoreSize && atomic.CompareAndSwapInt32(&m.isMergeRunning, 0, 1) {
 		msnap.Open()
 		m.snaps = snaps
 		mstoreOld := m.mstore

@@ -156,6 +156,7 @@ func TestInsertPerf(t *testing.T) {
 	wg.Wait()
 
 	snap, _ := db.NewSnapshot()
+	db.Sync()
 	dur := time.Since(t0)
 	fmt.Printf("%d items took %v -> %v items/s\n",
 		total, dur, float64(total)/float64(dur.Seconds()))
