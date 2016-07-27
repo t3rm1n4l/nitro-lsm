@@ -184,6 +184,7 @@ func (dw *diskWriter) batchModifyCallback(n *skiplist.Node, cmp skiplist.Compare
 		if opItr.Op() == itemInsertop {
 			opItm := (*Item)(opItr.Item()).Bytes()
 			err = doWriteItem(opItm)
+			dw.stats.ItemsInserted++
 		}
 	}
 
