@@ -125,32 +125,32 @@ func TestInsertPerf(t *testing.T) {
 	db := New()
 	defer db.Close()
 
-	n := 20000000 / runtime.GOMAXPROCS(0)
+	workers := 8
+	n := 20000000 / workers
 	t0 := time.Now()
-	total := n * runtime.GOMAXPROCS(0)
-	ch := make([]chan bool, runtime.GOMAXPROCS(0))
-	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+	total := n * workers
+	ch := make([]chan bool, workers)
+	for i := 0; i < workers; i++ {
 		ch[i] = make(chan bool)
 	}
 	go func() {
 
 		for {
-			for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+			for i := 0; i < workers; i++ {
 				<-ch[i]
 			}
 			snap, _ := db.NewSnapshot()
 			snap.Close()
 
-			for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+			for i := 0; i < workers; i++ {
 				ch[i] <- true
 			}
 		}
 	}()
 
-	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
+	for i := 0; i < workers; i++ {
 		wg.Add(1)
 		go doInsert(i, db, ch[i], &wg, n, false, true)
-		//go doInsert(i, db, ch[i], &wg, total, false, true)
 	}
 	wg.Wait()
 
