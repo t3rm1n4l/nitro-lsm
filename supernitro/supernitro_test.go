@@ -108,24 +108,23 @@ func doInsert(id int, db *SuperNitro, ch chan bool, wg *sync.WaitGroup, n int, i
 		if isRand {
 			val = rnd.Int()%1000000000 + id*10000000000
 		} else {
-			val = i
+			val = i + id*n
 		}
 		if shouldSnap && i%100000 == 0 {
 			ch <- true
 			<-ch
 		}
 		buf := make([]byte, 8)
-		binary.BigEndian.PutUint64(buf, uint64(val))
-		if val%runtime.GOMAXPROCS(0) == id {
-			w.Put(buf)
-		}
+		binary.LittleEndian.PutUint64(buf, uint64(val))
+		w.Put(buf)
 	}
 }
 
 func TestInsertPerf(t *testing.T) {
 	var wg sync.WaitGroup
 	db := New()
-	//defer db.Close()
+	defer db.Close()
+
 	n := 20000000 / runtime.GOMAXPROCS(0)
 	t0 := time.Now()
 	total := n * runtime.GOMAXPROCS(0)
@@ -150,7 +149,7 @@ func TestInsertPerf(t *testing.T) {
 
 	for i := 0; i < runtime.GOMAXPROCS(0); i++ {
 		wg.Add(1)
-		go doInsert(i, db, ch[i], &wg, n, true, true)
+		go doInsert(i, db, ch[i], &wg, n, false, true)
 		//go doInsert(i, db, ch[i], &wg, total, false, true)
 	}
 	wg.Wait()
