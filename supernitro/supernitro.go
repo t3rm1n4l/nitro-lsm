@@ -96,7 +96,13 @@ func (m *SuperNitro) NewIterator(snap *Snapshot) *Iterator {
 func (m *SuperNitro) execMerge(msnap *nitro.Snapshot, store *nitro.Nitro) {
 	fmt.Println("execMerge")
 	go func() {
-		defer store.Close()
+		defer func() {
+			store.Close()
+			if r := recover(); r != nil {
+				panic(r)
+			}
+		}()
+
 		if m.dstore == nil {
 			dcfg := m.Config.NitroConfig
 			dcfg.SetBlockStoreDir(m.Config.BlockstorePath)
