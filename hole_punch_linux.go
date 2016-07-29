@@ -33,3 +33,7 @@ func punchHole(f *os.File, offset, size int64) error {
 		0x02 /*FALLOC_FL_PUNCH_HOLE*/ |0x01 /* FALLOC_FL_KEEP_SIZE */, offset,
 		size)
 }
+
+func mmapPunchHole(b []byte) error {
+	return syscall.Madvise(b, syscall.MADV_WILLNEED)
+}

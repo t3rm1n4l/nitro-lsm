@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
+	"syscall"
 )
 
 var useLinuxHolePunch = false
@@ -135,4 +137,57 @@ func (fbm *fileBlockManager) ReadBlock(bptr blockPtr, buf []byte) error {
 		err = nil
 	}
 	return err
+}
+
+type mmapBlockManager struct {
+	file   *os.File
+	offset int64
+	data   []byte
+}
+
+const maxFileOffset = 16000000000000 // 16TB
+func newMmapBlockManager(dir string) (*mmapBlockManager, error) {
+	// TODO: Ability to reuse file and update offset
+	file := filepath.Join(dir, "blockstore-mmap.data")
+	mbm := new(mmapBlockManager)
+	if f, err := os.Create(file); err == nil {
+		if _, err := f.WriteAt([]byte("EOF"), maxFileOffset); err != nil {
+			return nil, err
+		}
+		f.Close()
+	}
+
+	if f, err := os.OpenFile(file, os.O_RDWR, 0755); err != nil {
+		return nil, err
+	} else {
+		mbm.file = f
+		mbm.data, err = syscall.Mmap(int(f.Fd()), 0,
+			maxFileOffset, syscall.PROT_READ|syscall.PROT_WRITE, syscall.MAP_SHARED)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return mbm, nil
+}
+
+func (mbm *mmapBlockManager) WriteBlock(bs []byte, shard int) (blockPtr, error) {
+	pos := atomic.AddInt64(&mbm.offset, blockSize)
+	pos -= blockSize
+
+	copy(mbm.data[pos:], bs)
+
+	bptr := newBlockPtr(0, pos)
+	return bptr, nil
+}
+
+func (mbm *mmapBlockManager) DeleteBlock(bptr blockPtr) error {
+	pos := bptr.Offset()
+	return mmapPunchHole(mbm.data[pos : pos+blockSize])
+}
+
+func (mbm mmapBlockManager) ReadBlock(bptr blockPtr, buf []byte) error {
+	pos := bptr.Offset()
+	copy(buf[:blockSize], mbm.data[pos:pos+blockSize])
+	return nil
 }

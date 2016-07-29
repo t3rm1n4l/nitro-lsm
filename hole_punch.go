@@ -17,3 +17,7 @@ import "os"
 func punchHole(f *os.File, offset, size int64) error {
 	return nil
 }
+
+func mmapPunchHole([]byte) error {
+	return nil
+}
