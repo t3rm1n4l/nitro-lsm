@@ -382,6 +382,9 @@ type Nitro struct {
 	leastUnrefSn uint32
 	itemsCount   int64
 
+	// Used to push gclist from current snapshot.
+	parentSnap *Snapshot
+
 	wlist    *Writer
 	gcchan   chan *skiplist.Node
 	freechan chan *skiplist.Node
@@ -473,6 +476,10 @@ func (m *Nitro) MemoryInUse() int64 {
 
 // Close shuts down the nitro instance
 func (m *Nitro) Close() {
+	if m.parentSnap != nil {
+		m.parentSnap.Close()
+	}
+
 	// Wait until all snapshot iterators have finished
 	for s := m.snapshots.GetStats(); int(s.NodeCount) != 0; s = m.snapshots.GetStats() {
 		time.Sleep(time.Millisecond)
@@ -673,9 +680,14 @@ func (m *Nitro) NewSnapshot() (*Snapshot, error) {
 		w.count = 0
 	}
 
-	snap := &Snapshot{db: m, sn: m.getCurrSn(), refCount: 1, count: m.ItemsCount()}
+	snap := &Snapshot{db: m, sn: m.getCurrSn(), refCount: 2, count: m.ItemsCount()}
 	m.snapshots.Insert(unsafe.Pointer(snap), CompareSnapshot, buf, &m.snapshots.Stats)
-	snap.gclist = head
+	if m.parentSnap != nil {
+		m.parentSnap.gclist = head
+		m.parentSnap.Close()
+	}
+	m.parentSnap = snap
+
 	newSn := atomic.AddUint32(&m.currSn, 1)
 	if newSn == math.MaxUint32 {
 		return nil, ErrMaxSnapshotsLimitReached
