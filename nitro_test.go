@@ -29,6 +29,74 @@ func init() {
 	Debug(true)
 }
 
+func TestBlocksPerf(t *testing.T) {
+	conf := testConf
+	conf.blockStoreDir = "./data"
+	db := NewWithConfig(conf)
+	defer db.Close()
+
+	cf := DefaultConfig()
+	cf.UseMemoryMgmt(mm.Malloc, mm.Free)
+	tdb := NewWithConfig(cf)
+
+	total := 100000000
+	thr := 8
+	max := total / thr
+	var wg sync.WaitGroup
+	for i := 0; i < thr; i++ {
+		wg.Add(1)
+		go func(id int, n int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			w := tdb.NewWriter()
+			buf := make([]byte, 8)
+			for x := 0; x < n; x++ {
+				binary.LittleEndian.PutUint64(buf, uint64(x+id*n))
+				w.Put(buf)
+			}
+		}(i, max, &wg)
+	}
+
+	tx := time.Now()
+	wg.Wait()
+	fmt.Println(time.Since(tx), total)
+
+	snp, _ := tdb.NewSnapshot()
+	t0 := time.Now()
+	fmt.Println(db.ApplyOps(snp, 8))
+	fmt.Println("took", time.Since(t0))
+	db.NewSnapshot()
+
+	snp.Close()
+	go tdb.Close()
+
+	tdb = NewWithConfig(cf)
+
+	max = max / 8
+	for i := 0; i < thr; i++ {
+		wg.Add(1)
+		go func(id int, n int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			w := tdb.NewWriter()
+			buf := make([]byte, 8)
+			for x := 0; x < n; x++ {
+				binary.LittleEndian.PutUint64(buf, uint64(x+id*n+total))
+				w.Put(buf)
+			}
+		}(i, max, &wg)
+	}
+
+	tx = time.Now()
+	wg.Wait()
+	fmt.Println(time.Since(tx), total)
+
+	snp, _ = tdb.NewSnapshot()
+	t0 = time.Now()
+	fmt.Println(db.ApplyOps(snp, 8))
+	db.NewSnapshot()
+	fmt.Println("took", time.Since(t0))
+
+}
+
 func TestBatchOps(t *testing.T) {
 	conf := testConf
 	conf.blockStoreDir = "/tmp/"
